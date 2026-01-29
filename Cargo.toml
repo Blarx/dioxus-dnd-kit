@@ -1,0 +1,21 @@
+[package]
+name = "dioxus-dnd-kit"
+version = "0.1.0"
+authors = ["Alexandr <flatbusy@gmail.com>"]
+edition = "2024"
+description = "A flexible, performant, and layout-stable Drag-and-Drop library for Dioxus."
+license = "MIT OR Apache-2.0"
+keywords = ["dioxus", "ui", "drag-and-drop", "dnd", "wasm"]
+categories = ["gui", "web-programming"]
+readme = "README.md"
+exclude = [".github", "dist", "target"]
+
+[dependencies]
+dioxus = { version = "0.7" }
+dioxus-floating = { version = "0.2" }
+futures = { version = "0.3" }
+gloo-timers = { version = "0.3", features = ["futures"] }
+
+[[example]]
+name = "simple_list"
+path = "examples/simple_list.rs"
