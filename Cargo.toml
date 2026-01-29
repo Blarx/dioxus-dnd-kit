@@ -8,7 +8,7 @@ description = "A flexible, performant, and layout-stable Drag-and-Drop library f
 license = "MIT OR Apache-2.0"
 keywords = ["dioxus", "ui", "drag-and-drop", "dnd", "wasm"]
 categories = ["gui", "web-programming"]
-readme = "README.md"
+readme = "readme.md"
 exclude = [".github", "dist", "target"]
 
 [dependencies]
