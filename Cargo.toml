@@ -3,6 +3,7 @@ name = "dioxus-dnd-kit"
 version = "0.1.0"
 authors = ["Alexandr <flatbusy@gmail.com>"]
 edition = "2024"
+repository = "https://github.com/Blarx/dioxus-dnd-kit"
 description = "A flexible, performant, and layout-stable Drag-and-Drop library for Dioxus."
 license = "MIT OR Apache-2.0"
 keywords = ["dioxus", "ui", "drag-and-drop", "dnd", "wasm"]
