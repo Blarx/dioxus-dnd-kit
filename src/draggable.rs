@@ -93,6 +93,8 @@ pub fn Draggable<T: DndItem>(
         }
     });
 
+    // Idle: span full droppable width so layout tracks window/container resize. While
+    // dragging: fixed hole matching the grabbed element so the overlay lines up.
     let placeholder_style = use_memo(move || {
         if let Some(rect) = (draggable_context.draggable_rect)() {
             if is_ready_to_hide() {

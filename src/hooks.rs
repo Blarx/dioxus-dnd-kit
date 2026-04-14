@@ -84,3 +84,53 @@ pub fn use_body_on_mouse_up(callback: Callback<()>) {
         }
     });
 }
+
+/// Attaches a global `resize` listener to the browser `window`.
+///
+/// Useful to invalidate cached geometry after viewport/container responsive changes.
+pub fn use_window_on_resize(callback: Callback<()>) {
+    let mut hook_eval = use_signal(|| Option::<Eval>::None);
+
+    use_effect(move || {
+        let mut eval = eval(
+            r#"
+            const controller = new AbortController();
+            const handler = () => {
+                dioxus.send("resize");
+            };
+            
+            window.addEventListener("resize", handler, {
+                signal: controller.signal
+            });
+            
+            try {
+                await dioxus.recv();
+            } catch (_) {
+            } finally {
+                controller.abort();
+            }
+            "#,
+        );
+        if let Some(old_eval) = *hook_eval.peek() {
+            let _ = old_eval.send("abort");
+        }
+        hook_eval.set(Some(eval));
+        spawn(async move {
+            loop {
+                match eval.recv::<String>().await {
+                    Ok(value) => {
+                        if value.as_str() == "resize" {
+                            callback.call(());
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+    });
+    use_drop(move || {
+        if let Some(old_eval) = hook_eval() {
+            let _ = old_eval.send("abort");
+        }
+    });
+}
