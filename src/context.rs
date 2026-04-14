@@ -6,7 +6,11 @@ use dioxus::{
 };
 use dioxus_floating::{OffsetOptions, ScrollableView};
 
-use crate::{DndItem, hooks::use_body_on_mouse_up, prelude::DraggableOverlay};
+use crate::{
+    DndItem,
+    hooks::{use_body_on_mouse_up, use_window_on_resize},
+    prelude::DraggableOverlay,
+};
 
 /// State management for a Drag-and-Drop session.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -99,6 +103,9 @@ pub fn DraggableView<T: DndItem>(
         });
     });
     use_body_on_mouse_up(mouseup);
+    use_window_on_resize(use_callback(move |_| {
+        context.recalculate_rects.with_mut(|r| *r += 1);
+    }));
 
     rsx! {
         ScrollableView { class,

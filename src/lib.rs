@@ -13,5 +13,7 @@ pub mod prelude {
     pub use crate::context::DraggableView;
     pub use crate::draggable::{Draggable, DraggableHandler, DraggableOverlay};
     pub use crate::droppable::Droppable;
-    pub use crate::hooks::{use_body_on_mouse_up, use_dnd_context, use_droppable_context};
+    pub use crate::hooks::{
+        use_body_on_mouse_up, use_dnd_context, use_droppable_context, use_window_on_resize,
+    };
 }
