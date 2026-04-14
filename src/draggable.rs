@@ -95,25 +95,19 @@ pub fn Draggable<T: DndItem>(
 
     let placeholder_style = use_memo(move || {
         if let Some(rect) = (draggable_context.draggable_rect)() {
-            format!(
-                "visibility: {}; pointer-events: none; width: {}px; height: {}px;",
-                if is_ready_to_hide() {
-                    "visible"
-                } else {
-                    "hidden"
-                },
-                rect.width(),
-                rect.height()
-            )
+            if is_ready_to_hide() {
+                format!(
+                    "visibility: visible; pointer-events: none; width: 100%; height: {}px;",
+                    rect.height()
+                )
+            } else {
+                format!(
+                    "visibility: hidden; pointer-events: none; width: 100%; min-height: {}px; height: auto;",
+                    rect.height()
+                )
+            }
         } else {
-            format!(
-                "visibility: {}; pointer-events: none; width: auto; height: auto;",
-                if is_ready_to_hide() {
-                    "visible"
-                } else {
-                    "hidden"
-                },
-            )
+            "visibility: hidden; pointer-events: none; width: 100%; height: auto;".to_string()
         }
     });
 
@@ -130,11 +124,13 @@ pub fn Draggable<T: DndItem>(
                 draggable_context.draggable_container_ref.set(Some(evt.data()));
             },
             div { style: "{placeholder_style}",
-                if let Some(placeholder_render) = context.placeholder_render {
-                    {placeholder_render((
-                        draggable_context.rect().height(),
-                        draggable_context.rect().width()
-                    ))}
+                if is_ready_to_hide() {
+                    if let Some(placeholder_render) = context.placeholder_render {
+                        {placeholder_render((
+                            draggable_context.rect().height(),
+                            draggable_context.rect().width()
+                        ))}
+                    }
                 }
             }
             div { class: "{class}", style: "{draggable_style}",
