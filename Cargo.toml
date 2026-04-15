@@ -13,7 +13,7 @@ exclude = [".github", "dist", "target"]
 
 [dependencies]
 dioxus = { version = "0.7" }
-dioxus-floating = { version = "0.2" }
+dioxus-floating = { version = "0.3" }
 futures = { version = "0.3" }
 gloo-timers = { version = "0.3", features = ["futures"] }
 
