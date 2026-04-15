@@ -1,6 +1,6 @@
 [package]
 name = "dioxus-dnd-kit"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Alexandr <flatbusy@gmail.com>"]
 edition = "2024"
 repository = "https://github.com/Blarx/dioxus-dnd-kit"

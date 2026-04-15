@@ -13,7 +13,7 @@ Developed to handle smooth reordering, even when using JIT-engines like **Tailwi
 Add to your `Cargo.toml`:
 ```toml
 [dependencies]
-dioxus-dnd-kit = "0.1.0"
+dioxus-dnd-kit = "0.1.2"
 ```
 
 ### Quick Start
