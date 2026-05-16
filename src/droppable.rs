@@ -159,6 +159,24 @@ pub fn Droppable<T: DndItem>(
         }
     });
 
+    // Refresh cached collision rects when the app reports that item layout changed.
+    use_effect(move || {
+        let _ = (context.recalculate_rects)();
+
+        if is_active() {
+            spawn(async move {
+                gloo_timers::future::TimeoutFuture::new(10).await;
+
+                if let Some(dropable) = (droppable_context.dropable_ref)() {
+                    let rect = dropable.get_client_rect().await.unwrap_or_default();
+                    droppable_context.dropable_rect.set(Some(rect));
+                }
+
+                droppable_context.collect_elements_rects().await;
+            });
+        }
+    });
+
     // on dragging
     use_effect(move || {
         if is_active() {
