@@ -25,6 +25,9 @@ jobs:
       - name: Cargo Check
         run: cargo check --all-targets
 
+      - name: Run Tests
+        run: cargo test --all-targets
+
       - name: Run Doc Tests
         # Проверяем примеры, которые мы написали в документации ///
         run: cargo test --doc
