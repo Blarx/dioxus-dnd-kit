@@ -70,7 +70,7 @@ impl<T: DndItem> DndContext<T> {
 
 /// The root container and manager for the Drag-and-Drop area.
 ///
-/// `DraggableView` initializes the [`DndContext`], handles global mouse events (move/up),
+/// `DraggableView` initializes the [`DndContext`], handles mouse events (move/up),
 /// and manages the visual lifecycle of the dragged item.
 ///
 /// ### Features:
@@ -83,7 +83,8 @@ pub fn DraggableView<T: DndItem>(
     #[props(default)]
     class: ReadSignal<String>,
 
-    /// Content containing [`Draggable`] items and [`Droppable`] zones.
+    /// Content containing [`Draggable`](crate::prelude::Draggable) items and
+    /// [`Droppable`](crate::prelude::Droppable) zones.
     children: Element,
 
     /// A callback to generate a stable, unique key for each item.

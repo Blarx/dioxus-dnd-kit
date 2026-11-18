@@ -26,7 +26,7 @@ use dioxus::prelude::*;
 use dioxus_dnd_kit::prelude::*;
 
 fn App() -> Element {
-    let mut items = use_signal(|| vec!["Item 1".to_string(), "Item 2".to_string(), "Item 3".to_string()]);
+    let items = use_signal(|| vec!["Item 1".to_string(), "Item 2".to_string(), "Item 3".to_string()]);
 
     rsx! {
         DraggableView {
@@ -35,7 +35,9 @@ fn App() -> Element {
             key_gen: move |item: String| item.clone(),
             // How to render each item in the list/overlay
             render: move |item: String| rsx! {
-                div { "{item}" }
+                div {
+                    DraggableHandler { item: item.clone(), "{item}" }
+                }
             },
             // The droppable container
             Droppable {
