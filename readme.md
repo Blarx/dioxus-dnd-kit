@@ -3,6 +3,8 @@ A flexible, performant, and layout-stable Drag-and-Drop library for **Dioxus 0.7
 
 Developed to handle smooth reordering, even when using JIT-engines like **Tailwind CSS**. It avoids layout flickering by keeping the DOM structure stable during drag operations.
 
+See the [changelog](./CHANGELOG.md) for version history and compatibility notes.
+
 ### Features
 - **Layout Stability**: No more jumping elements when an item is picked up.
 - **Tailwind Friendly**: Handles dynamic style injections gracefully.
@@ -107,6 +109,13 @@ without changing their sizes. The `simple_list` example additionally shows a
 
 ### Examples
 Check the [examples](./examples) folder for more.
+
+### Roadmap
+
+- `0.2.0`: relative list layout alongside the existing absolute layout.
+- Next minor release: connected lists and dragging items between containers.
+
+Cross-list transfers are not available in `0.2.0`.
 
 ### License
 MIT or Apache-2.0
