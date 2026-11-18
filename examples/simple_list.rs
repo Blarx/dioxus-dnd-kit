@@ -101,12 +101,8 @@ fn DndTailwindListener() -> Element {
             }
             watcher.set(Some(eval_item));
 
-            loop {
-                if let Ok(_) = eval_item.recv::<String>().await {
-                    context.recalculate_rects.with_mut(|r| *r += 1);
-                } else {
-                    break;
-                }
+            while eval_item.recv::<String>().await.is_ok() {
+                context.recalculate_rects.with_mut(|r| *r += 1);
             }
         });
     });

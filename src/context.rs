@@ -8,9 +8,16 @@ use dioxus_floating::{OffsetOptions, ScrollableView};
 
 use crate::{
     DndItem,
-    hooks::{use_body_on_mouse_up, use_window_on_resize},
+    hooks::{use_body_on_mouse_up, use_window_on_resize, use_window_on_scroll},
     prelude::DraggableOverlay,
 };
+
+/// Invalidates in-flight pickup measurements when the button is released or a new drag starts.
+/// Kept separate from the public context so existing context consumers remain compatible.
+#[derive(Clone, Copy)]
+pub(crate) struct DragSession {
+    pub generation: Signal<u64>,
+}
 
 /// State management for a Drag-and-Drop session.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -69,7 +76,7 @@ impl<T: DndItem> DndContext<T> {
 /// ### Features:
 /// - **Selection Lock**: Automatically toggles `user-select: none` during dragging to prevent text highlighting.
 /// - **Overlay Management**: Renders the [`DraggableOverlay`] automatically when an item is picked up.
-/// - **Smooth Landing**: Implements a short delay before clearing the active state to prevent layout flickering.
+/// - **Stable Landing**: Restores the original and removes the overlay in the same update.
 #[component]
 pub fn DraggableView<T: DndItem>(
     /// CSS classes for the outer container.
@@ -91,20 +98,26 @@ pub fn DraggableView<T: DndItem>(
 ) -> Element {
     let mut context =
         use_context_provider(move || DndContext::new(key_gen, render, placeholder_render));
+    let mut session = use_context_provider(|| DragSession {
+        generation: Signal::new(0),
+    });
 
     let mouseup = use_callback(move |_| {
+        session.generation.with_mut(|value| *value += 1);
+        context.active.set(None);
         context.is_floating_ready.set(false);
-        spawn(async move {
-            gloo_timers::future::TimeoutFuture::new(50).await;
-            context.active.set(None);
-            context.active_mounted.set(None);
-            context.active_rect.set(None);
-            context.start_pos.set(ClientPoint::zero());
-        });
+        context.active_mounted.set(None);
+        context.active_rect.set(None);
+        context.start_pos.set(ClientPoint::zero());
     });
     use_body_on_mouse_up(mouseup);
     use_window_on_resize(use_callback(move |_| {
         context.recalculate_rects.with_mut(|r| *r += 1);
+    }));
+    use_window_on_scroll(use_callback(move |_| {
+        if context.active.peek().is_some() {
+            context.recalculate_rects.with_mut(|r| *r += 1);
+        }
     }));
 
     rsx! {
@@ -117,14 +130,158 @@ pub fn DraggableView<T: DndItem>(
             on_mouse_move: move |e: MouseEvent| {
                 context.mouse_pos.set(e.client_coordinates());
             },
-            // on_mouse_up: move |_| {
-            //     context.active.set(None);
-            //     context.start_pos.set(ClientPoint::zero());
-            // },
             {children}
             if let Some(active_item) = context.active.read().as_ref() {
                 DraggableOverlay::<T> { item: active_item.clone() }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        DragLayout,
+        draggable::Draggable,
+        droppable::{DragLayoutContext, DroppableContext},
+    };
+    use dioxus::core::{AttributeValue, ElementId, Mutation};
+    use std::cell::RefCell;
+
+    #[derive(Clone, Copy)]
+    struct Controls {
+        context: DndContext<u32>,
+        layout: Signal<DragLayout>,
+    }
+
+    fn item_under_test() -> Element {
+        let captured = use_context::<Rc<RefCell<Option<Controls>>>>();
+        let key_gen = use_callback(|item: u32| item.to_string());
+        let render = use_callback(|_: u32| rsx! { span { "Item" } });
+        let context = use_context_provider(move || DndContext::new(key_gen, render, None));
+        use_context_provider(DroppableContext::<u32>::default);
+        let layout = use_signal(|| DragLayout::Relative);
+        use_context_provider(move || DragLayoutContext(layout.into()));
+        use_hook(move || *captured.borrow_mut() = Some(Controls { context, layout }));
+        rsx! { Draggable { index: 0, item: 1_u32, class: "regression-item" } }
+    }
+
+    fn setup() -> (VirtualDom, Controls, ElementId) {
+        let captured = Rc::new(RefCell::new(None::<Controls>));
+        let mut dom = VirtualDom::new(item_under_test).with_root_context(captured.clone());
+        let initial = dom.rebuild_to_vec();
+        let content = initial
+            .edits
+            .iter()
+            .find_map(|edit| match edit {
+                Mutation::SetAttribute {
+                    name: "class",
+                    value: AttributeValue::Text(class),
+                    id,
+                    ..
+                } if class == "regression-item" => Some(*id),
+                _ => None,
+            })
+            .expect("the original draggable content must be mounted");
+        let controls = captured.borrow().expect("capture drag controls");
+        (dom, controls, content)
+    }
+
+    fn has_style(
+        edits: &[Mutation],
+        node: ElementId,
+        property: &str,
+        expected: Option<&str>,
+    ) -> bool {
+        edits.iter().any(|edit| match edit {
+            Mutation::SetAttribute {
+                name,
+                ns: Some("style"),
+                value,
+                id,
+            } if *id == node && *name == property => match (value, expected) {
+                (AttributeValue::Text(actual), Some(expected)) => actual == expected,
+                (AttributeValue::None, None) => true,
+                _ => false,
+            },
+            _ => false,
+        })
+    }
+
+    #[test]
+    fn restores_hit_testing_after_each_of_two_drags() {
+        let (mut dom, mut controls, content) = setup();
+        for _ in 0..2 {
+            dom.in_scope(ScopeId::APP, || {
+                controls.context.active.set(Some(1));
+                controls.context.is_floating_ready.set(true);
+            });
+            let dragging = dom.render_immediate_to_vec();
+            assert!(has_style(
+                &dragging.edits,
+                content,
+                "pointer-events",
+                Some("none")
+            ));
+            assert!(has_style(
+                &dragging.edits,
+                content,
+                "visibility",
+                Some("hidden")
+            ));
+
+            dom.in_scope(ScopeId::APP, || {
+                controls.context.active.set(None);
+                controls.context.is_floating_ready.set(false);
+            });
+            let dropped = dom.render_immediate_to_vec();
+            // This must be a renderer-level CSS property removal. Omitting it
+            // from a replacement style string leaves pointer-events: none behind.
+            assert!(has_style(&dropped.edits, content, "pointer-events", None));
+            assert!(has_style(
+                &dropped.edits,
+                content,
+                "visibility",
+                Some("visible")
+            ));
+            assert!(
+                !dropped
+                    .edits
+                    .iter()
+                    .any(|edit| matches!(edit, Mutation::Remove { id } if *id == content))
+            );
+        }
+    }
+
+    #[test]
+    fn switching_layouts_clears_styles_owned_by_previous_mode() {
+        let (mut dom, mut controls, content) = setup();
+        dom.in_scope(ScopeId::APP, || {
+            controls.context.active.set(Some(1));
+            controls.context.is_floating_ready.set(true);
+        });
+        dom.render_immediate_to_vec();
+
+        dom.in_scope(ScopeId::APP, || controls.layout.set(DragLayout::Absolute));
+        let absolute = dom.render_immediate_to_vec();
+        assert!(has_style(&absolute.edits, content, "pointer-events", None));
+        assert!(has_style(&absolute.edits, content, "visibility", None));
+        assert!(has_style(&absolute.edits, content, "opacity", Some("0")));
+
+        dom.in_scope(ScopeId::APP, || controls.layout.set(DragLayout::Relative));
+        let relative = dom.render_immediate_to_vec();
+        for property in ["top", "left", "right", "opacity"] {
+            assert!(
+                has_style(&relative.edits, content, property, None),
+                "clear {property}"
+            );
+        }
+        assert!(has_style(
+            &relative.edits,
+            content,
+            "position",
+            Some("relative")
+        ));
     }
 }

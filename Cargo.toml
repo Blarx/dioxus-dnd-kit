@@ -1,6 +1,6 @@
 [package]
 name = "dioxus-dnd-kit"
-version = "0.1.3"
+version = "0.2.0"
 authors = ["Alexandr <flatbusy@gmail.com>"]
 edition = "2024"
 repository = "https://github.com/Blarx/dioxus-dnd-kit"
@@ -24,3 +24,7 @@ path = "examples/simple_list.rs"
 [[example]]
 name = "resizable_list"
 path = "examples/resizable_list.rs"
+
+[[example]]
+name = "relative_list"
+path = "examples/relative_list.rs"

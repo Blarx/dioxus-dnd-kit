@@ -6,6 +6,41 @@ use dioxus::{
 
 use crate::{droppable::DroppableContext, prelude::*};
 
+/// Let pending renderer mutations reach the DOM before measuring layout.
+pub(crate) async fn wait_for_layout() {
+    let _ = eval("await new Promise(requestAnimationFrame);").await;
+}
+
+/// Scroll does not bubble, so listen in the capture phase, including nested scrollers.
+pub(crate) fn use_window_on_scroll(callback: Callback<()>) {
+    let mut hook_eval = use_signal(|| None::<Eval>);
+    use_effect(move || {
+        let mut listener = eval(
+            r#"
+            const controller = new AbortController();
+            window.addEventListener("scroll", () => dioxus.send(true), {
+                capture: true, passive: true, signal: controller.signal
+            });
+            await dioxus.recv();
+            controller.abort();
+            "#,
+        );
+        spawn(async move {
+            while listener.recv::<bool>().await.is_ok() {
+                callback.call(());
+            }
+        });
+        if let Some(previous) = hook_eval.replace(Some(listener)) {
+            let _ = previous.send("abort");
+        }
+    });
+    use_drop(move || {
+        if let Some(listener) = *hook_eval.peek() {
+            let _ = listener.send("abort");
+        }
+    });
+}
+
 /// Returns the global drag-and-drop context.
 ///
 /// Provides access to the current active item, mouse position, and global drag state.
@@ -46,13 +81,9 @@ pub fn use_body_on_mouse_up(callback: Callback<()>) {
             });
             
             try {
-                let r = await dioxus.recv(); 
-                console.error("use_body_on_mouse_up r res", r);
-            } catch (e) {
-                // Канал закрыт со стороны Rust
-                console.error("use_body_on_mouse_up chan closed", e);
+                await dioxus.recv();
+            } catch (_) {
             } finally {
-                console.log("use_body_on_mouse_up destroying via AbortController...");
                 controller.abort();
             }
             "#,
@@ -116,14 +147,9 @@ pub fn use_window_on_resize(callback: Callback<()>) {
         }
         hook_eval.set(Some(eval));
         spawn(async move {
-            loop {
-                match eval.recv::<String>().await {
-                    Ok(value) => {
-                        if value.as_str() == "resize" {
-                            callback.call(());
-                        }
-                    }
-                    Err(_) => break,
+            while let Ok(value) = eval.recv::<String>().await {
+                if value.as_str() == "resize" {
+                    callback.call(());
                 }
             }
         });

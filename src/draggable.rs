@@ -1,11 +1,13 @@
 use std::rc::Rc;
 
-use dioxus::{html::geometry::PixelsRect, prelude::*};
+use dioxus::{core::Task, html::geometry::PixelsRect, prelude::*};
 use dioxus_floating::{FloatingOptions, OffsetOptions, use_placement_on_point};
 
 use crate::{
-    DndItem,
-    hooks::{use_dnd_context, use_droppable_context},
+    DndItem, DragLayout,
+    context::DragSession,
+    droppable::DragLayoutContext,
+    hooks::{use_dnd_context, use_droppable_context, wait_for_layout},
 };
 
 /// Local state for an individual draggable element.
@@ -33,8 +35,8 @@ impl DraggableContext {
 
 /// A wrapper component that makes its content draggable.
 ///
-/// It handles layout stability by providing a placeholder and switching the
-/// original element to `position: absolute` when it's being dragged.
+/// In absolute mode a measured placeholder reserves space. In relative mode the
+/// original stays in flow and is hidden only after the fixed overlay is ready.
 #[component]
 pub fn Draggable<T: DndItem>(
     /// Index of the item within the list (useful for sorting logic).
@@ -47,16 +49,19 @@ pub fn Draggable<T: DndItem>(
     /// Content that will be rendered inside the draggable container.
     children: Element,
 ) -> Element {
-    let context = use_dnd_context::<T>();
+    let mut context = use_dnd_context::<T>();
     let mut droppable_context = use_droppable_context::<T>();
+    let layout_context = try_use_context::<DragLayoutContext>();
+    let layout = use_memo(move || layout_context.map(|ctx| (ctx.0)()).unwrap_or_default());
     let mut draggable_context = use_context_provider(DraggableContext::default);
-    let trigger_item = item.clone();
+    let mut measurement_task = use_signal(|| None::<Task>);
+    let trigger_key = context.key_gen.call(item.clone());
     let is_active = use_memo(move || {
         context
             .active
             .read()
             .clone()
-            .map(|active_item| active_item.eq(&trigger_item))
+            .map(|active_item| context.key_gen.call(active_item) == trigger_key)
             .unwrap_or(false)
     });
     let is_ready_to_hide = use_memo(move || is_active() && (context.is_floating_ready)());
@@ -64,7 +69,11 @@ pub fn Draggable<T: DndItem>(
     let register_item = item.clone();
     use_effect(move || {
         if let Some(draggable) = (draggable_context.draggable_ref)() {
-            droppable_context.register_element_mounted(register_item.clone(), draggable.clone());
+            droppable_context.register_element_by_key(
+                register_item.clone(),
+                draggable,
+                context.key_gen,
+            );
         }
     });
 
@@ -72,60 +81,55 @@ pub fn Draggable<T: DndItem>(
         // subscribe to recalculation logic.
         let _ = (context.recalculate_rects)();
 
-        // Clear draggable rect when recalculate.
-        if draggable_context.draggable_rect.peek().is_some() {
-            draggable_context.draggable_rect.set(None);
+        if let Some(task) = measurement_task.take() {
+            task.cancel();
         }
 
         if let Some(draggable) = (draggable_context.draggable_ref)() {
-            spawn(async move {
-                gloo_timers::future::TimeoutFuture::new(10).await;
-                let rect = draggable
-                    .get_client_rect()
-                    .await
-                    .unwrap_or(PixelsRect::zero());
-                draggable_context.draggable_rect.set(Some(rect));
-                draggable_context.draggable_container_rect.set(Some(rect));
-            });
+            measurement_task.set(Some(spawn(async move {
+                wait_for_layout().await;
+                if let Ok(rect) = draggable.get_client_rect().await {
+                    // Keep the previous height until its replacement is available.
+                    draggable_context.draggable_rect.set(Some(rect));
+                    draggable_context.draggable_container_rect.set(Some(rect));
+                }
+            })));
         } else {
             draggable_context.draggable_rect.set(None);
             draggable_context.draggable_container_rect.set(None);
         }
     });
 
-    // Idle: span full droppable width so layout tracks window/container resize. While
-    // dragging: fixed hole matching the grabbed element so the overlay lines up.
-    let placeholder_style = use_memo(move || {
-        if let Some(rect) = (draggable_context.draggable_rect)() {
-            if is_ready_to_hide() {
-                format!(
-                    "visibility: visible; pointer-events: none; width: 100%; height: {}px;",
-                    rect.height()
-                )
-            } else {
-                format!(
-                    "visibility: hidden; pointer-events: none; width: 100%; min-height: {}px; height: auto;",
-                    rect.height()
-                )
-            }
-        } else {
-            "visibility: hidden; pointer-events: none; width: 100%; height: auto;".to_string()
-        }
-    });
-
-    let draggable_style = use_memo(move || {
-        format!(
-            "position: absolute; top: 0; left: 0; right: 0; opacity: {};",
-            if is_ready_to_hide() { 0 } else { 1 }
-        )
-    });
-
+    // Use individual CSS attributes for stateful styles. Dioxus preserves omitted
+    // properties when replacing a style string; namespaced attributes can remove
+    // them on drop and when switching layouts (notably pointer-events: none).
     rsx! {
-        div { class: "relative",
+        div {
+            class: "relative",
+            position: "relative",
+            display: (layout() == DragLayout::Relative).then_some("flow-root"),
             onmounted: move |evt: MountedEvent| {
                 draggable_context.draggable_container_ref.set(Some(evt.data()));
             },
-            div { style: "{placeholder_style}",
+            div {
+                position: (layout() == DragLayout::Relative).then_some("absolute"),
+                top: (layout() == DragLayout::Relative).then_some("0"),
+                right: (layout() == DragLayout::Relative).then_some("0"),
+                bottom: (layout() == DragLayout::Relative).then_some("0"),
+                left: (layout() == DragLayout::Relative).then_some("0"),
+                visibility: if is_ready_to_hide() { "visible" } else { "hidden" },
+                pointer_events: "none",
+                width: if layout() == DragLayout::Relative { "auto" } else { "100%" },
+                height: if layout() == DragLayout::Absolute && is_ready_to_hide() {
+                    format!("{}px", draggable_context.rect().height())
+                } else {
+                    "auto".to_string()
+                },
+                min_height: if layout() == DragLayout::Absolute && !is_ready_to_hide() {
+                    format!("{}px", draggable_context.rect().height())
+                } else {
+                    "0px".to_string()
+                },
                 if is_ready_to_hide() {
                     if let Some(placeholder_render) = context.placeholder_render {
                         {placeholder_render((
@@ -135,9 +139,20 @@ pub fn Draggable<T: DndItem>(
                     }
                 }
             }
-            div { class: "{class}", style: "{draggable_style}",
+            div {
+                class: "{class}",
+                position: if layout() == DragLayout::Relative { "relative" } else { "absolute" },
+                top: (layout() == DragLayout::Absolute).then_some("0"),
+                left: (layout() == DragLayout::Absolute).then_some("0"),
+                right: (layout() == DragLayout::Absolute).then_some("0"),
+                opacity: (layout() == DragLayout::Absolute).then_some(if is_ready_to_hide() { "0" } else { "1" }),
+                visibility: (layout() == DragLayout::Relative).then_some(if is_ready_to_hide() { "hidden" } else { "visible" }),
+                pointer_events: (layout() == DragLayout::Relative && is_ready_to_hide()).then_some("none"),
                 onmounted: move |evt: MountedEvent| {
                     draggable_context.draggable_ref.set(Some(evt.data()));
+                },
+                onresize: move |_| {
+                    context.recalculate_rects.with_mut(|value| *value += 1);
                 },
                 {context.render.call(item.clone())}
                 {children}
@@ -162,22 +177,32 @@ pub fn DraggableHandler<T: DndItem>(
 ) -> Element {
     let mut context = use_dnd_context::<T>();
     let draggable_context = try_use_context::<DraggableContext>();
+    let mut session = use_context::<DragSession>();
 
     rsx! {
         div { class: "{class}",
             onmousedown: move |evt: MouseEvent| {
+                if evt.trigger_button() != Some(dioxus::html::input_data::MouseButton::Primary)
+                    || context.active.peek().is_some()
+                {
+                    return;
+                }
                 let click_pos = evt.client_coordinates();
 
-                context.start_pos.set(click_pos);
-                // is not overlay
-                if let Some(draggable_ctx) = draggable_context
+                if let Some(mut draggable_ctx) = draggable_context
                     && let Some(mounted) = (draggable_ctx.draggable_container_ref)() {
-                    // set active after calculations
-                    context.active.set(Some(item.clone()));
+                    evt.prevent_default();
+                    session.generation.with_mut(|value| *value += 1);
+                    let generation = *session.generation.peek();
+                    context.start_pos.set(click_pos);
+                    context.mouse_pos.set(click_pos);
+                    let item = item.clone();
                     spawn(async move {
-                        // Замеряем ЗДЕСЬ И СЕЙЧАС, чтобы скролл был учтен актуально
-                        if let Ok(rect) = mounted.get_client_rect().await {
-
+                        if let Ok(rect) = mounted.get_client_rect().await
+                            && *session.generation.peek() == generation
+                        {
+                            draggable_ctx.draggable_rect.set(Some(rect));
+                            context.is_floating_ready.set(false);
                             context.active_mounted.set(Some(mounted));
                             context.active_rect.set(Some(rect));
 
@@ -185,6 +210,8 @@ pub fn DraggableHandler<T: DndItem>(
                             let off_y = rect.min_y() - click_pos.y - 1.0;
 
                             context.grab_offset.set(OffsetOptions::new(off_x, off_y));
+                            // Mount the overlay only after its size and grab offset are known.
+                            context.active.set(Some(item));
                         }
                     });
                 }
@@ -214,22 +241,31 @@ pub fn DraggableOverlay<T: DndItem>(
         overlay_ref,
         trigger_point,
         FloatingOptions {
+            // A dragged item must follow the grab point even outside the list bounds.
+            middleware: Vec::new(),
             offset: context.grab_offset.read().clone(),
             ..Default::default()
         },
     );
+
+    let is_ready = use_memo(move || placement().is_ready);
+    use_effect(move || {
+        if context.active.peek().is_some() {
+            context.is_floating_ready.set(is_ready());
+        }
+    });
 
     let draggable_style = use_memo(move || {
         let rect = context.active_rect.read().unwrap_or(PixelsRect::zero());
 
         placement.with(|pos| {
             if pos.is_ready {
-                context.is_floating_ready.set(true);
                 format!(
                     r#"
                     position: fixed;
                     inset: 0px auto auto 0px;
                     margin: 0px;
+                    box-sizing: border-box;
                     transform: translate3d({}px, {}px, 0px);
                     height: {}px;
                     width: {}px;
@@ -251,7 +287,7 @@ pub fn DraggableOverlay<T: DndItem>(
                     transform: none;
                     height: {}px;
                     width: {}px;
-                    pointer-events: auto;
+                    pointer-events: none;
                     z-index: auto;
                     left: 0;
                     top: 0;
