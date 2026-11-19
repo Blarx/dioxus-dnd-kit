@@ -38,6 +38,8 @@ Notable changes to `dioxus-dnd-kit` are documented here, newest first.
 
 ### Changed
 
+- Include both license texts for the existing `MIT OR Apache-2.0` licensing:
+  the unchanged MIT text is now `LICENSE-MIT`, alongside `LICENSE-APACHE`.
 - CI and tagged releases share formatting, Clippy, tests, strict rustdoc, package
   verification, and Web example builds. Publishing requires a matching version
   tag and uses the dependency lockfile verified by those checks.

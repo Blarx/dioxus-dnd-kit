@@ -228,4 +228,6 @@ component calls, the `prelude` imports, `DndItem` bounds, and public context fie
 remain compatible. Omitting `layout` still selects `DragLayout::Absolute`.
 
 ### License
-MIT or Apache-2.0
+
+This library is dual-licensed under the [MIT license](./LICENSE-MIT) or the
+[Apache License, Version 2.0](./LICENSE-APACHE), at your option.
