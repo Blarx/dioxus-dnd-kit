@@ -195,7 +195,15 @@ impl<T: DndItem> DndContext<T> {
 /// The root container and manager for the Drag-and-Drop area.
 ///
 /// `DraggableView` initializes the [`DndContext`], handles mouse events (move/up),
-/// and manages the visual lifecycle of the dragged item.
+/// and manages both the visual drag and its reversible list transaction.
+/// [`Droppable`](crate::prelude::Droppable) calculates local sort positions;
+/// [`ConnectedLists`](crate::prelude::ConnectedLists) extends the same transaction
+/// API to transfers between lists. Their item signals change live during previews.
+///
+/// Use `on_drop` for asynchronous persistence and [`use_dnd_state`](crate::use_dnd_state)
+/// in a descendant component for reactive validation UI. While a decision is
+/// pending, the whole nested view tree blocks new pickups. Without `on_drop`,
+/// changed drops accept immediately. See [`DropEvent`] for decisions and Undo.
 ///
 /// ### Features:
 /// - **Selection Lock**: Automatically toggles `user-select: none` during dragging to prevent text highlighting.
@@ -223,11 +231,27 @@ pub fn DraggableView<T: DndItem>(
     /// Optional passive overlay renderer for items containing nested lists.
     /// Defaults to `render`; avoid mounting live Droppables in the overlay copy.
     overlay_render: Option<Callback<T, Element>>,
-    /// One changed drop request; accept or reject it, including after an await.
+    /// Called once after release at a changed, eligible list position.
+    ///
+    /// The optimistic move is already in the item signals. Accept or reject the
+    /// [`DropEvent`], including after an await. Releasing its last unresolved clone
+    /// attempts rejection automatically; retaining one keeps validation pending.
+    /// Omitting this callback accepts changes immediately. Hover updates,
+    /// unchanged drops, and cancelled drags do not call it.
     on_drop: Option<Callback<DropEvent<T>>>,
-    /// Fast synchronous eligibility check for a candidate position. No API calls here.
+    /// Fast, synchronous eligibility predicate for a proposed position.
+    ///
+    /// Receives a [`DropChange`] with the pickup source and proposed destination.
+    /// It can run repeatedly during preview and again at release. Return `false`
+    /// to deny the candidate; keep this predicate free of mutations and network
+    /// requests. Asynchronous business validation belongs in `on_drop`.
     can_drop: Option<Callback<DropChange<T>, bool>>,
+    /// Called once at pickup from a registered list, before any preview changes.
+    /// Receives [`DragStart`] with the original item, key, and list position.
     on_drag_start: Option<Callback<DragStart<T>>>,
+    /// Called when a drag is cancelled before creating a drop request, after
+    /// attempting restoration. Inspect [`DragCancel::rollback`] for its result.
+    /// Rejection of a pending request is reported through [`DropOutcome`](crate::DropOutcome).
     on_drag_cancel: Option<Callback<DragCancel<T>>>,
 ) -> Element {
     let mut context =

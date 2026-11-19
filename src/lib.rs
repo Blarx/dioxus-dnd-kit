@@ -126,8 +126,8 @@
 //! # Validating and saving a drop
 //!
 //! Configure `on_drop` on [`DraggableView`](prelude::DraggableView) for both
-//! same-list sorting and cross-list transfers. It fires once for a changed,
-//! accepted drop, never for hover updates, cancellation, or a no-op. Give lists
+//! same-list sorting and cross-list transfers. It fires once after release at a
+//! changed, eligible position, never for hover updates, cancellation, or a no-op. Give lists
 //! stable `id` values to identify them in your API; anonymous lists report `""`.
 //!
 //! ```no_run
@@ -257,8 +257,11 @@ pub enum DragLayout {
 /// Primary sorting direction. The container's CSS still determines its layout.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum DragAxis {
+    /// Sort from top to bottom using vertical midpoints. This is the default.
     #[default]
     Vertical,
+    /// Sort from left to right using horizontal midpoints. Arrange the container
+    /// horizontally with CSS; this option does not change its visual layout.
     Horizontal,
 }
 

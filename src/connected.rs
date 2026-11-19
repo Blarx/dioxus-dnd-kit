@@ -33,6 +33,8 @@ pub(crate) use types::{ListEntry, ListIdentity, ListSnapshot};
 pub fn ConnectedLists<T: DndItem>(
     children: Element,
     /// Called once when an item starts a drag in this group, before any transfer.
+    /// Receives only the item; use `DraggableView::on_drag_start` for its stable
+    /// key and pickup location. Configuring both handlers calls each one.
     on_drag_start: Option<Callback<T>>,
 ) -> Element {
     let dnd = use_dnd_context::<T>();

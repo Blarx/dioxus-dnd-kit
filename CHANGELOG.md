@@ -33,6 +33,8 @@ Notable changes to `dioxus-dnd-kit` are documented here, newest first.
   persistent item data, an empty destination, both layout modes, and an independent list.
 - Crate-level rustdoc guide, compilable quick starts, layout and identity guidance,
   and API links. The README quick start now includes a drag handle.
+- Public event and state rustdoc covers candidate versus released positions,
+  decision results, shared event handles, Undo lifetime, and nested validation state.
 
 ### Changed
 
