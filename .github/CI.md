@@ -30,5 +30,13 @@ The publish job runs only after all shared checks succeed, and uses the existing
 `CARGO_REGISTRY_TOKEN` repository secret. Updating the workflow files alone does
 not publish a crate.
 
-When adding an example, add it to the Web build loop in `checks.yml`. Keep the
-Dioxus CLI version there aligned with the Dioxus version used to verify the examples.
+## GitHub Pages
+
+Select **GitHub Actions** as the source in **Settings → Pages**. Pushes to `main`
+and manual CI runs on `main` publish the checked Web builds to
+<https://blarx.github.io/dioxus-dnd-kit/>. The Web job builds the demos with the
+base path used by a default GitHub Pages project site (`/<repo>/<example>`).
+
+When adding an example, include it in the Web build loop in `checks.yml`, then
+link to it from `pages/index.html`. Keep the Dioxus CLI version
+aligned with the Dioxus version used to verify the examples.

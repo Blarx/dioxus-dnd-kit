@@ -18,3 +18,21 @@ jobs:
   check:
     name: Checks
     uses: ./.github/workflows/checks.yml
+    with:
+      upload-pages: ${{ github.ref == 'refs/heads/main' }}
+
+  deploy-pages:
+    name: Deploy examples to GitHub Pages
+    if: github.ref == 'refs/heads/main'
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy GitHub Pages artifact
+        id: deployment
+        uses: actions/deploy-pages@v4

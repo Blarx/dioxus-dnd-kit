@@ -219,7 +219,9 @@ dx serve --example connected_lists --web
 ```
 
 ### Examples
-Check the [examples](./examples) folder for more.
+
+[Try the live demos](https://blarx.github.io/dioxus-dnd-kit/) or browse the
+[example source code](./examples).
 
 ### Compatibility
 

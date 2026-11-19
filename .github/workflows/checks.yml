@@ -2,6 +2,10 @@ name: Shared checks
 
 on:
   workflow_call:
+    inputs:
+      upload-pages:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -101,8 +105,22 @@ jobs:
         with:
           tool: dioxus-cli@${{ env.DIOXUS_CLI_VERSION }}
 
-      - name: Build all Web examples
+      - name: Build and assemble all Web examples
         run: |
+          site="$RUNNER_TEMP/dioxus-pages"
+          mkdir -p "$site"
+          cp .github/pages/index.html "$site/index.html"
           for example in simple_list resizable_list relative_list connected_lists; do
-            dx build --web --release --example "$example" --locked --debug-symbols false
+            dx build --web --release --example "$example" --locked --debug-symbols false \
+              --base-path "/${GITHUB_REPOSITORY#*/}/$example"
+            public="target/dx/$example/release/web/public"
+            test -s "$public/index.html"
+            mkdir -p "$site/$example"
+            cp -R "$public/." "$site/$example/"
           done
+
+      - name: Upload GitHub Pages artifact
+        if: inputs.upload-pages
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ${{ runner.temp }}/dioxus-pages

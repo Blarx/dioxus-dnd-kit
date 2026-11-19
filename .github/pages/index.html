@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dioxus DnD Kit examples</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font: 100%/1.55 system-ui, sans-serif;
+    }
+    body {
+      max-width: 42rem;
+      margin: clamp(2rem, 8vw, 5rem) auto;
+      padding: 0 1.25rem;
+    }
+    h1 {
+      font-size: clamp(1.85rem, 6vw, 3rem);
+      line-height: 1.1;
+    }
+    ul {
+      padding: 0;
+      margin: 2rem 0;
+      list-style: none;
+    }
+    li {
+      padding: 0.85rem 0;
+      border-block-start: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+    }
+    li a {
+      font-weight: 650;
+      text-underline-offset: 0.2em;
+    }
+    li p {
+      margin: 0.25rem 0 0;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Dioxus DnD Kit examples</h1>
+    <ul role="list">
+      <li><a href="simple_list/">Simple list</a><p>Drag items to reorder a list.</p></li>
+      <li><a href="resizable_list/">Resizable list</a><p>Reorder resizable items with different heights.</p></li>
+      <li><a href="relative_list/">Relative layout</a><p>Reorder items laid out in normal document flow.</p></li>
+      <li><a href="connected_lists/">Connected lists</a><p>Drag items within and between columns.</p></li>
+    </ul>
+    <a href="https://github.com/Blarx/dioxus-dnd-kit/tree/main/examples">View example source on GitHub</a>
+  </main>
+</body>
+</html>
