@@ -2,7 +2,7 @@
 
 Notable changes to `dioxus-dnd-kit` are documented here, newest first.
 
-## [Unreleased] — 0.3.0
+## [0.3.0] — 2026-11-19
 
 ### Added
 
@@ -144,7 +144,7 @@ Notable changes to `dioxus-dnd-kit` are documented here, newest first.
 - Custom item and placeholder rendering, stable DOM keys, and the `simple_list`
   example.
 
-[Unreleased]: https://github.com/Blarx/dioxus-dnd-kit/compare/v0.2.0...HEAD
+[0.3.0]: https://github.com/Blarx/dioxus-dnd-kit/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Blarx/dioxus-dnd-kit/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/Blarx/dioxus-dnd-kit/compare/8fec246...v0.1.3
 [0.1.2]: https://github.com/Blarx/dioxus-dnd-kit/compare/v0.1.1...8fec246
