@@ -1,0 +1,104 @@
+name: Shared checks
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  DIOXUS_CLI_VERSION: "0.7.10"
+
+jobs:
+  rust:
+    name: Rust, docs & package
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Install workflow linter
+        uses: taiki-e/install-action@v2
+        with:
+          tool: actionlint@1.7.12
+
+      - name: Lint workflows
+        run: actionlint -color
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      # This library does not commit Cargo.lock. All following jobs use this
+      # resolution, including the eventual publish job in the calling workflow.
+      - name: Resolve dependencies
+        run: cargo generate-lockfile
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: native
+
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Run tests
+        run: cargo test --locked --all-targets
+
+      - name: Run documentation examples
+        run: cargo test --locked --doc
+
+      - name: Build strict rustdoc
+        env:
+          RUSTDOCFLAGS: "-D warnings -D missing_docs -D rustdoc::broken_intra_doc_links"
+        run: cargo doc --locked --no-deps
+
+      - name: Verify crate package without publishing
+        run: cargo publish --locked --dry-run
+
+      - name: Save checked dependency resolution
+        uses: actions/upload-artifact@v7
+        with:
+          name: checked-cargo-lock
+          path: Cargo.lock
+          if-no-files-found: error
+          retention-days: 7
+
+  web:
+    name: Web examples
+    needs: rust
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust and WebAssembly target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Restore checked dependency resolution
+        uses: actions/download-artifact@v8
+        with:
+          name: checked-cargo-lock
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: web
+
+      - name: Install Dioxus CLI
+        uses: taiki-e/install-action@v2
+        with:
+          tool: dioxus-cli@${{ env.DIOXUS_CLI_VERSION }}
+
+      - name: Build all Web examples
+        run: |
+          for example in simple_list resizable_list relative_list connected_lists; do
+            dx build --web --release --example "$example" --locked --debug-symbols false
+          done

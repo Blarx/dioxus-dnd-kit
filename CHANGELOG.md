@@ -38,6 +38,9 @@ Notable changes to `dioxus-dnd-kit` are documented here, newest first.
 
 ### Changed
 
+- CI and tagged releases share formatting, Clippy, tests, strict rustdoc, package
+  verification, and Web example builds. Publishing requires a matching version
+  tag and uses the dependency lockfile verified by those checks.
 - Base DnD transactions now live in `DndTransactionContext`, with one shared list
   registry and preview mutation path for local sorting and connected transfers.
   Validation state reads the transaction directly instead of mirroring it.
