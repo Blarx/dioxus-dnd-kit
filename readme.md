@@ -1,11 +1,27 @@
 # dioxus-dnd-kit 🦀
+
 A flexible, performant, and layout-stable Drag-and-Drop library for **Dioxus 0.7**.
+
+## Examples
+
+[Live demo gallery](https://blarx.github.io/dioxus-dnd-kit/) · [Example source code](./examples)
+
+[Simple list](https://blarx.github.io/dioxus-dnd-kit/simple_list/) ·
+[Resizable list](https://blarx.github.io/dioxus-dnd-kit/resizable_list/) ·
+[Relative layout](https://blarx.github.io/dioxus-dnd-kit/relative_list/) ·
+[Connected lists](https://blarx.github.io/dioxus-dnd-kit/connected_lists/)
+
+## Contents
+
+- [Features](#features) · [Installation](#installation) · [Quick Start](#quick-start) · [Components](#components)
+- [Relative Layout](#relative-layout) · [Tailwind & Dynamic Rects](#advanced-tailwind--dynamic-rects) · [Connected Lists](#connected-lists)
+- [API validation](#validating-changes-with-an-api) · [Sorting columns](#sorting-the-columns-themselves)
+- [Compatibility](#compatibility) · [License](#license)
+
+## Features
 
 Developed to handle smooth reordering, even when using JIT-engines like **Tailwind CSS**. It avoids layout flickering by keeping the DOM structure stable during drag operations.
 
-See the [changelog](./CHANGELOG.md) for version history and compatibility notes.
-
-### Features
 - **Layout Stability**: No more jumping elements when an item is picked up.
 - **Tailwind Friendly**: Handles dynamic style injections gracefully.
 - **High Performance**: Uses `join_all` for batch rect measurements.
@@ -14,14 +30,16 @@ See the [changelog](./CHANGELOG.md) for version history and compatibility notes.
 - **Compatible Default**: Existing lists keep their absolute positioning mode.
 - **Connected Lists**: Opt in to live transfers between explicitly identified containers.
 
-### Installation
+## Installation
+
 Add to your `Cargo.toml`:
 ```toml
 [dependencies]
 dioxus-dnd-kit = "0.3"
 ```
 
-### Quick Start
+## Quick Start
+
 ```rust
 use dioxus::prelude::*;
 use dioxus_dnd_kit::prelude::*;
@@ -51,7 +69,8 @@ fn App() -> Element {
 }
 ```
 
-### Components
+## Components
+
 `DraggableView`
 
 The root manager. Handles global mouse events and renders the DraggableOverlay.
@@ -68,7 +87,7 @@ A specific area to grab the item. Perfect if you only want a small icon to trigg
 
 The "brain" of the operation. It detects collisions and updates your items signal in real-time.
 
-### Relative Layout
+## Relative Layout
 
 Set `layout` on a list to keep its items in normal document flow:
 
@@ -104,13 +123,14 @@ It includes natural card heights, expandable content, a narrow-list toggle,
 an optional custom placeholder, a nested scroll container, resizing the active
 item during dragging, and a switch to compare absolute mode.
 
-### Advanced: Tailwind & Dynamic Rects
+## Advanced: Tailwind & Dynamic Rects
+
 Item size changes are observed through Dioxus resize events. You can also trigger
 `recalculate_rects` on `DndContext` when an application changes item positions
 without changing their sizes. The `simple_list` example additionally shows a
 `MutationObserver` for Tailwind Play CDN style injection.
 
-### Connected Lists
+## Connected Lists
 
 Place related lists inside `ConnectedLists::<YourItem>` under one `DraggableView`:
 
@@ -146,7 +166,7 @@ fixed overlay remains mounted and retains its pickup dimensions and grab offset.
 Lists outside the group, and lists without an `id`, remain independent. Existing
 `Droppable { items, ... }` code keeps its default absolute behavior.
 
-### Validating changes with an API
+## Validating changes with an API
 
 Set `on_drop` on `DraggableView` to receive a single transaction after either a
 same-list reorder or a transfer. The item stays at the previewed position while
@@ -190,7 +210,7 @@ older Undo handles. Perform any reverse API request in your application and chec
 the result of `undo()`. `on_drag_start` and `on_drag_cancel` provide lifecycle
 metadata; without `on_drop`, existing lists still accept changes immediately.
 
-### Sorting the columns themselves
+## Sorting the columns themselves
 
 Use `axis: DragAxis::Horizontal` on a `Droppable<Column>` and arrange it with
 horizontal flex/grid CSS. Vertical remains the default; connected insertion
@@ -218,18 +238,15 @@ success/error at both levels, local eligibility, pending state, and separate Und
 dx serve --example connected_lists --web
 ```
 
-### Examples
-
-[Try the live demos](https://blarx.github.io/dioxus-dnd-kit/) or browse the
-[example source code](./examples).
-
-### Compatibility
+## Compatibility
 
 `0.3` adds connected lists through an opt-in wrapper and container IDs. Existing
 component calls, the `prelude` imports, `DndItem` bounds, and public context fields
 remain compatible. Omitting `layout` still selects `DragLayout::Absolute`.
 
-### License
+See the [changelog](./CHANGELOG.md) for version history and compatibility notes.
+
+## License
 
 This library is dual-licensed under the [MIT license](./LICENSE-MIT) or the
 [Apache License, Version 2.0](./LICENSE-APACHE), at your option.
