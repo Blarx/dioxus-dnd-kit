@@ -1,9 +1,12 @@
 use std::rc::Rc;
 
 use crate::{
-    DndItem, DragLayout,
+    DndItem, DragAxis, DragLayout,
+    connected::{ConnectedListsContext, ListEntry, ListIdentity, ListSnapshot},
+    context::list::ItemAccess,
+    context::{list::ListAccess, transaction::DndTransactionContext},
     draggable::Draggable,
-    hooks::{use_dnd_context, wait_for_layout},
+    hooks::{use_dnd_context, visible_container_rect, wait_for_layout},
 };
 use dioxus::{
     core::Task,
@@ -24,7 +27,7 @@ pub struct DroppableContext<T: DndItem> {
     pub elements: Signal<Vec<ItemGeometry<T>>>,
     /// Reference to the container node itself.
     pub dropable_ref: Signal<Option<Rc<MountedData>>>,
-    /// Bounding box of the droppable container.
+    /// Bounding box of the droppable container; clipped to its visible area in connected groups.
     pub dropable_rect: Signal<Option<PixelsRect>>,
 }
 
@@ -172,6 +175,9 @@ impl<T: DndItem> DroppableContext<T> {
 /// [`DragLayout::Relative`] for content whose height should follow normal flow.
 #[component]
 pub fn Droppable<T: DndItem>(
+    /// Stable, document-unique HTML ID. Non-empty IDs opt into the nearest ConnectedLists group.
+    #[props(default)]
+    id: ReadSignal<String>,
     /// CSS classes for the droppable container.
     #[props(default)]
     class: ReadSignal<String>,
@@ -181,10 +187,18 @@ pub fn Droppable<T: DndItem>(
     /// How the original items reserve space; the overlay is always fixed.
     #[props(default)]
     layout: ReadSignal<DragLayout>,
+    /// Sorting direction; defaults to vertical. Match it with the container CSS.
+    #[props(default)]
+    axis: ReadSignal<DragAxis>,
     /// The reactive list of items. This signal will be modified during reordering.
     items: Signal<Vec<T>>,
 ) -> Element {
-    let context = use_dnd_context::<T>();
+    let mut context = use_dnd_context::<T>();
+    let connections =
+        try_use_context::<ConnectedListsContext<T>>().filter(|group| group.belongs_to(context));
+    let transactions = try_use_context::<DndTransactionContext<T>>();
+    let owner = use_hook(dioxus::core::current_scope_id);
+    use_context_provider(move || ListIdentity { owner, id });
     use_context_provider(move || DragLayoutContext(layout));
     let mut droppable_context = use_context_provider(move || {
         let mut zone = DroppableContext::<T>::new();
@@ -193,7 +207,72 @@ pub fn Droppable<T: DndItem>(
     });
     let mut measurement_task = use_signal(|| None::<Task>);
     let mut geometry_ready = use_signal(|| false);
+    let mut measured_revision = use_signal(|| 0_u64);
     let mut last_mouse = use_signal(|| None::<ClientPoint>);
+    let item_access = use_memo(use_reactive((&items,), |(items,)| ItemAccess::from(items)));
+
+    use_effect(move || {
+        let id = id();
+        let items = item_access();
+        if let Some(mut connections) = connections {
+            connections.unregister(owner);
+        }
+        if let Some(mut transactions) = transactions {
+            transactions.unregister(owner);
+            let group = connections.filter(|_| !id.is_empty());
+            if transactions.register(ListAccess {
+                owner,
+                id,
+                items,
+                group: group.map(|group| group.id()),
+            }) && let Some(mut group) = group
+            {
+                group.register(ListEntry {
+                    owner,
+                    snapshot: ListSnapshot {
+                        values: Vec::new(),
+                        rect: None,
+                        item_rects: Vec::new(),
+                        ready: false,
+                        measured_revision: 0,
+                        axis: *axis.peek(),
+                    },
+                });
+            }
+        }
+    });
+    use_drop(move || {
+        if let Some(mut connections) = connections {
+            connections.unregister(owner);
+        }
+        if let Some(mut transactions) = transactions {
+            transactions.unregister(owner);
+        }
+    });
+
+    use_effect(move || {
+        if let Some(mut connections) = connections {
+            let _ = id();
+            let _ = item_access();
+            let values = items();
+            let elements = droppable_context.elements.read();
+            let order_matches = values.len() == elements.len()
+                && values.iter().zip(elements.iter()).all(|(item, element)| {
+                    context.key_gen.call(item.clone())
+                        == context.key_gen.call(element.value.clone())
+                });
+            let snapshot = ListSnapshot {
+                values,
+                rect: (droppable_context.dropable_rect)(),
+                item_rects: elements.iter().map(|element| element.rect).collect(),
+                ready: geometry_ready() && order_matches,
+                measured_revision: measured_revision(),
+                axis: axis(),
+            };
+            drop(elements);
+            connections.publish(owner, snapshot);
+        }
+    });
 
     let is_active = use_memo(move || {
         context.active.read().as_ref().is_some_and(|active| {
@@ -226,10 +305,13 @@ pub fn Droppable<T: DndItem>(
 
     use_effect(move || {
         let current_items = items();
-        let _ = (context.recalculate_rects)();
+        let _ = axis();
+        let revision = (context.recalculate_rects)();
         let _ = mounted_order();
         let mounted = (droppable_context.dropable_ref)();
         let active = is_active();
+        let container_id = id();
+        let connected = connections.is_some() && !container_id.is_empty();
 
         geometry_ready.set(false);
         if let Some(task) = measurement_task.take() {
@@ -238,17 +320,24 @@ pub fn Droppable<T: DndItem>(
         droppable_context.update_elements_by_key(current_items, context.key_gen);
         if !active {
             last_mouse.set(None);
+        }
+        if !active && !connected {
             return;
         }
 
         measurement_task.set(Some(spawn(async move {
             wait_for_layout().await;
-            if let Some(mounted) = mounted
+            if connected {
+                droppable_context
+                    .dropable_rect
+                    .set(visible_container_rect(container_id).await);
+            } else if let Some(mounted) = mounted
                 && let Ok(rect) = mounted.get_client_rect().await
             {
                 droppable_context.dropable_rect.set(Some(rect));
             }
             droppable_context.collect_elements_rects().await;
+            measured_revision.set(revision);
             geometry_ready.set(true);
         })));
     });
@@ -258,11 +347,12 @@ pub fn Droppable<T: DndItem>(
             return;
         }
         let mouse = (context.mouse_pos)();
-        let previous_y = last_mouse
+        let direction = axis();
+        let previous = last_mouse
             .peek()
             .as_ref()
-            .map(|point| point.y)
-            .unwrap_or(context.start_pos.peek().y);
+            .copied()
+            .unwrap_or(*context.start_pos.peek());
         last_mouse.set(Some(mouse));
 
         let active_key = context
@@ -290,24 +380,44 @@ pub fn Droppable<T: DndItem>(
             .iter()
             .map(|element| element.rect)
             .collect::<Vec<_>>();
-        let target = sort_target(&rects, from, mouse, previous_y);
+        let target = sort_target_on_axis(
+            &rects,
+            from,
+            mouse,
+            direction.coordinate(previous),
+            direction,
+        );
         drop(elements);
         drop(current_items);
 
         if let Some(to) = target {
-            // Pause collision handling until the new DOM order has been measured.
-            geometry_ready.set(false);
-            items.with_mut(|items| {
-                let item = items.remove(from);
-                items.insert(to, item);
-            });
+            let moved = if let Some(mut transactions) = transactions {
+                transactions.preview_move(owner, to).unwrap_or(false)
+            } else {
+                // Preserve custom low-level containers that provide DndContext
+                // directly, without DraggableView's transaction provider.
+                items.with_mut(|items| {
+                    let item = items.remove(from);
+                    items.insert(to, item);
+                });
+                true
+            };
+            if moved {
+                // Pause collisions until the new DOM order has been measured.
+                geometry_ready.set(false);
+            }
         }
     });
 
     rsx! {
-        div { class: "{class}", position: "relative",
+        div { id: if id().is_empty() { None } else { Some(id()) }, class: "{class}", position: "relative",
             onmounted: move |evt| {
                 droppable_context.dropable_ref.set(Some(evt.data()));
+            },
+            onresize: move |_| {
+                if connections.is_some() && !id().is_empty() {
+                    context.recalculate_rects.with_mut(|version| *version += 1);
+                }
             },
             for (index, item) in items().iter().enumerate() {
                 Draggable { key: "{context.key_gen.call(item.clone())}", class: "{draggable_class}", item: item.clone(), index }
@@ -318,11 +428,22 @@ pub fn Droppable<T: DndItem>(
 
 /// Only cross a neighbor's midpoint in the direction the pointer is moving.
 /// This prevents differently sized rows from swapping back after remeasurement.
+#[cfg(test)]
 fn sort_target(
     rects: &[Option<PixelsRect>],
     from: usize,
     mouse: ClientPoint,
     previous_y: f64,
+) -> Option<usize> {
+    sort_target_on_axis(rects, from, mouse, previous_y, DragAxis::Vertical)
+}
+
+fn sort_target_on_axis(
+    rects: &[Option<PixelsRect>],
+    from: usize,
+    mouse: ClientPoint,
+    previous: f64,
+    axis: DragAxis,
 ) -> Option<usize> {
     let point = PixelsVector2D::new(mouse.x, mouse.y).to_point();
     rects.iter().enumerate().find_map(|(index, rect)| {
@@ -330,170 +451,13 @@ fn sort_target(
         if !rect.contains(point) {
             return None;
         }
-        let center_y = rect.min_y() + rect.height() / 2.0;
-        let crosses_down = index > from && mouse.y > previous_y && mouse.y > center_y;
-        let crosses_up = index < from && mouse.y < previous_y && mouse.y < center_y;
+        let center = axis.midpoint(*rect);
+        let coordinate = axis.coordinate(mouse);
+        let crosses_down = index > from && coordinate > previous && coordinate > center;
+        let crosses_up = index < from && coordinate < previous && coordinate < center;
         (crosses_down || crosses_up).then_some(index)
     })
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use dioxus::html::geometry::PixelsSize;
-    use dioxus::html::{MountedResult, RenderedElementBacking};
-    use std::{
-        cell::RefCell,
-        future::Future,
-        pin::Pin,
-        task::{Context, Poll},
-    };
-
-    fn rect(y: f64, height: f64) -> Option<PixelsRect> {
-        Some(PixelsRect::new(
-            PixelsVector2D::new(0.0, y).to_point(),
-            PixelsSize::new(200.0, height),
-        ))
-    }
-
-    #[test]
-    fn crosses_midpoints_in_both_directions() {
-        let rects = [rect(0.0, 60.0), rect(72.0, 160.0), rect(244.0, 80.0)];
-        assert_eq!(
-            sort_target(&rects, 0, ClientPoint::new(20.0, 150.0), 100.0),
-            None
-        );
-        assert_eq!(
-            sort_target(&rects, 0, ClientPoint::new(20.0, 160.0), 150.0),
-            Some(1)
-        );
-        assert_eq!(
-            sort_target(&rects, 2, ClientPoint::new(20.0, 150.0), 160.0),
-            Some(1)
-        );
-    }
-
-    #[test]
-    fn mixed_heights_do_not_swap_back_after_remeasurement() {
-        // A tall active row moved below a short row. After remeasurement the
-        // pointer overlaps the short row, but is still travelling downwards.
-        let rects = [rect(0.0, 60.0), rect(72.0, 160.0)];
-        assert_eq!(
-            sort_target(&rects, 1, ClientPoint::new(20.0, 25.0), 24.0),
-            None
-        );
-        assert_eq!(
-            sort_target(&rects, 1, ClientPoint::new(20.0, 25.0), 25.0),
-            None
-        );
-        assert_eq!(
-            sort_target(&rects, 1, ClientPoint::new(20.0, 25.0), 26.0),
-            Some(0)
-        );
-    }
-
-    #[test]
-    fn ignores_gaps_outside_width_and_missing_rects() {
-        let rects = [rect(0.0, 60.0), rect(72.0, 160.0), None];
-        assert_eq!(
-            sort_target(&rects, 0, ClientPoint::new(20.0, 65.0), 50.0),
-            None
-        );
-        assert_eq!(
-            sort_target(&rects, 0, ClientPoint::new(220.0, 170.0), 150.0),
-            None
-        );
-        assert_eq!(
-            sort_target(&rects, 0, ClientPoint::new(20.0, 250.0), 150.0),
-            None
-        );
-    }
-
-    #[derive(Clone, PartialEq)]
-    struct Item {
-        id: u32,
-        expanded: bool,
-    }
-
-    #[test]
-    fn preserves_registration_when_item_data_changes() {
-        fn app() -> Element {
-            let mut zone = use_hook(DroppableContext::<Item>::new);
-            let key_gen = use_callback(|item: Item| item.id.to_string());
-            use_hook(move || {
-                let item = Item {
-                    id: 1,
-                    expanded: false,
-                };
-                zone.update_elements_by_key(vec![item.clone()], key_gen);
-                let node = Rc::new(MountedData::new(()));
-                zone.register_element_by_key(item, node.clone(), key_gen);
-                zone.update_elements_by_key(
-                    vec![Item {
-                        id: 1,
-                        expanded: true,
-                    }],
-                    key_gen,
-                );
-                let elements = zone.elements.peek();
-                assert!(elements[0].value.expanded);
-                assert!(Rc::ptr_eq(elements[0].mounted.as_ref().unwrap(), &node));
-            });
-            rsx! {}
-        }
-        VirtualDom::new(app).rebuild_in_place();
-    }
-
-    struct DelayedRect(RefCell<Option<futures::channel::oneshot::Receiver<PixelsRect>>>);
-
-    impl RenderedElementBacking for DelayedRect {
-        fn as_any(&self) -> &dyn std::any::Any {
-            self
-        }
-
-        fn get_client_rect(&self) -> Pin<Box<dyn Future<Output = MountedResult<PixelsRect>>>> {
-            let receiver = self.0.borrow_mut().take().unwrap();
-            Box::pin(async move { Ok(receiver.await.unwrap()) })
-        }
-    }
-
-    #[test]
-    fn discards_rects_when_order_changes_during_measurement() {
-        fn app() -> Element {
-            let mut zone = use_hook(DroppableContext::<u32>::new);
-            use_hook(move || {
-                zone.update_elements_order(vec![1, 2]);
-                let (first_tx, first_rx) = futures::channel::oneshot::channel();
-                let (second_tx, second_rx) = futures::channel::oneshot::channel();
-                zone.register_element_mounted(
-                    1,
-                    Rc::new(MountedData::new(DelayedRect(RefCell::new(Some(first_rx))))),
-                );
-                zone.register_element_mounted(
-                    2,
-                    Rc::new(MountedData::new(DelayedRect(RefCell::new(Some(second_rx))))),
-                );
-                let mut measuring = zone;
-                let mut measurement = Box::pin(measuring.collect_elements_rects());
-                let waker = futures::task::noop_waker();
-                assert!(matches!(
-                    measurement.as_mut().poll(&mut Context::from_waker(&waker)),
-                    Poll::Pending
-                ));
-
-                zone.update_elements_order(vec![2, 1]);
-                first_tx.send(rect(0.0, 60.0).unwrap()).unwrap();
-                second_tx.send(rect(74.0, 120.0).unwrap()).unwrap();
-                futures::executor::block_on(measurement);
-                assert!(
-                    zone.elements
-                        .peek()
-                        .iter()
-                        .all(|element| element.rect.is_none())
-                );
-            });
-            rsx! {}
-        }
-        VirtualDom::new(app).rebuild_in_place();
-    }
-}
+mod tests;

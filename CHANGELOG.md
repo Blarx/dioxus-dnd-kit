@@ -2,6 +2,67 @@
 
 Notable changes to `dioxus-dnd-kit` are documented here, newest first.
 
+## [Unreleased] — 0.3.0
+
+### Added
+
+- Horizontal sorting via `DragAxis` and `Droppable::axis` (vertical by default).
+  Connected insertion follows the destination's axis.
+- Nested column/card sorting in the board example, with separate handles,
+  validation requests and Undo. `DraggableView::overlay_render` draws a passive
+  column snapshot without registering duplicate lists or HTML IDs.
+- Typed drag-session isolation and a shared lease across nested views, including
+  API validation. `DndState::is_busy()` exposes tree-wide activity. Nested views
+  cannot accidentally join an ancestor view's connected group.
+- Transactional `DraggableView::on_drop` for same-list sorting and connected
+  transfers. `DropEvent` can accept/reject after an await and undo an accepted move.
+- `DropChange`/`DropLocation` identify the item, original/final list and index,
+  and neighboring keys. View-level `can_drop`, `on_drag_start`, `on_drag_cancel`,
+  and `use_dnd_state` expose local eligibility and operation state.
+- Pending validation blocks new pickups in the view. Rollback preserves unrelated
+  edits; conflict checks and unmount invalidation prevent stale decisions from
+  overwriting authoritative data. The board example simulates delayed API responses.
+- `ConnectedLists<T>` connects `Droppable` containers with explicit, stable `id`
+  values and separate item signals. Independent lists keep their original behavior.
+- Live cross-list transfers, including insertion into empty lists and positions
+  selected from the destination items' geometry.
+- Cancellation restores the dragged item to its original list and index on Escape,
+  window blur, or release outside the connected containers.
+- Optional `ConnectedLists::on_drag_start` callback.
+- A Trello-style `connected_lists` example with three columns, mixed card heights,
+  persistent item data, an empty destination, both layout modes, and an independent list.
+- Crate-level rustdoc guide, compilable quick starts, layout and identity guidance,
+  and API links. The README quick start now includes a drag handle.
+
+### Changed
+
+- Base DnD transactions now live in `DndTransactionContext`, with one shared list
+  registry and preview mutation path for local sorting and connected transfers.
+  Validation state reads the transaction directly instead of mirroring it.
+- Clearing the public drag context's `active` signal completes independent
+  transactions and releases their lock; changed drops still await validation.
+- Global drag input tracks mouse movement and the final release position outside
+  the view, allowing the overlay and cancellation logic to follow the pointer.
+- Connected containers refresh their geometry even before they contain the active
+  item. A newly mounted active absolute item immediately reserves its pickup height.
+- Internal transfer bookkeeping and regression tests cover duplicate prevention,
+  rollback without overwriting unrelated edits, empty lists, and group isolation.
+- Connected drop targets respect viewport bounds and clipping by scrollable or
+  overflow-hidden ancestors, so hidden portions cannot receive a drop.
+- Connected-list coordination uses published geometry snapshots and scoped item
+  callbacks, avoiding child-owned signal access and Dioxus warning spam during drags.
+- Connected hover and release share pointer-first, visible-card-overlap hit testing.
+  An accepted placeholder commits on release even with the handle outside the list;
+  moving away from all targets hides its highlight and cancels on release.
+
+### Compatibility
+
+- Absolute layout remains the default, and lists connect only through an explicit
+  `ConnectedLists` wrapper plus non-empty container IDs.
+- Existing component calls, public context fields, and `DndItem` bounds remain valid.
+- Item content remounts across container boundaries; store persistent UI state in
+  item data or in a parent keyed by item ID.
+
 ## [0.2.0] — 2026-11-18
 
 ### Added
@@ -76,6 +137,7 @@ Notable changes to `dioxus-dnd-kit` are documented here, newest first.
 - Custom item and placeholder rendering, stable DOM keys, and the `simple_list`
   example.
 
+[Unreleased]: https://github.com/Blarx/dioxus-dnd-kit/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/Blarx/dioxus-dnd-kit/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/Blarx/dioxus-dnd-kit/compare/8fec246...v0.1.3
 [0.1.2]: https://github.com/Blarx/dioxus-dnd-kit/compare/v0.1.1...8fec246

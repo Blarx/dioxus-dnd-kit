@@ -5,7 +5,9 @@ use dioxus_floating::{FloatingOptions, OffsetOptions, use_placement_on_point};
 
 use crate::{
     DndItem, DragLayout,
-    context::DragSession,
+    connected::{ConnectedListsContext, ListIdentity},
+    context::transaction::DndTransactionContext,
+    context::{DragSession, OverlayRenderer},
     droppable::DragLayoutContext,
     hooks::{use_dnd_context, use_droppable_context, wait_for_layout},
 };
@@ -22,8 +24,6 @@ pub struct DraggableContext {
     pub draggable_rect: Signal<Option<PixelsRect>>,
     /// Reference to the outer relative container (used for positioning stability).
     pub draggable_container_ref: Signal<Option<Rc<MountedData>>>,
-    /// Bounding box of the container.
-    pub draggable_container_rect: Signal<Option<PixelsRect>>,
 }
 
 impl DraggableContext {
@@ -39,7 +39,7 @@ impl DraggableContext {
 /// original stays in flow and is hidden only after the fixed overlay is ready.
 #[component]
 pub fn Draggable<T: DndItem>(
-    /// Index of the item within the list (useful for sorting logic).
+    /// Retained for compatibility. Sorting and identity use stable item keys.
     index: usize,
     /// The data associated with this draggable item.
     item: T,
@@ -53,9 +53,23 @@ pub fn Draggable<T: DndItem>(
     let mut droppable_context = use_droppable_context::<T>();
     let layout_context = try_use_context::<DragLayoutContext>();
     let layout = use_memo(move || layout_context.map(|ctx| (ctx.0)()).unwrap_or_default());
-    let mut draggable_context = use_context_provider(DraggableContext::default);
-    let mut measurement_task = use_signal(|| None::<Task>);
     let trigger_key = context.key_gen.call(item.clone());
+    let initial_key = trigger_key.clone();
+    let mut draggable_context = use_context_provider(move || {
+        let mut local = DraggableContext::default();
+        // A cross-list transfer remounts this original. Reserve the pickup
+        // height immediately in absolute mode until the new width is measured.
+        if context
+            .active
+            .peek()
+            .as_ref()
+            .is_some_and(|item| context.key_gen.call(item.clone()) == initial_key)
+        {
+            local.draggable_rect.set(*context.active_rect.peek());
+        }
+        local
+    });
+    let mut measurement_task = use_signal(|| None::<Task>);
     let is_active = use_memo(move || {
         context
             .active
@@ -65,10 +79,35 @@ pub fn Draggable<T: DndItem>(
             .unwrap_or(false)
     });
     let is_ready_to_hide = use_memo(move || is_active() && (context.is_floating_ready)());
+    let connections =
+        try_use_context::<ConnectedListsContext<T>>().filter(|group| group.belongs_to(context));
+    let connected_list = try_use_context::<ListIdentity>();
+    let preview_key = context.key_gen.call(item.clone());
+    let show_placeholder = use_memo(move || {
+        if !is_ready_to_hide() {
+            return false;
+        }
+        if let (Some(connections), Some(list)) = (connections, connected_list)
+            && !(list.id)().is_empty()
+        {
+            return connections.shows_placeholder(list.owner, &preview_key);
+        }
+        true
+    });
 
     let register_item = item.clone();
+    let register_key = context.key_gen.call(item.clone());
+    let in_registry = use_memo(move || {
+        droppable_context
+            .elements
+            .read()
+            .iter()
+            .any(|element| context.key_gen.call(element.value.clone()) == register_key)
+    });
     use_effect(move || {
-        if let Some(draggable) = (draggable_context.draggable_ref)() {
+        if in_registry()
+            && let Some(draggable) = (draggable_context.draggable_ref)()
+        {
             droppable_context.register_element_by_key(
                 register_item.clone(),
                 draggable,
@@ -91,12 +130,10 @@ pub fn Draggable<T: DndItem>(
                 if let Ok(rect) = draggable.get_client_rect().await {
                     // Keep the previous height until its replacement is available.
                     draggable_context.draggable_rect.set(Some(rect));
-                    draggable_context.draggable_container_rect.set(Some(rect));
                 }
             })));
         } else {
             draggable_context.draggable_rect.set(None);
-            draggable_context.draggable_container_rect.set(None);
         }
     });
 
@@ -117,7 +154,7 @@ pub fn Draggable<T: DndItem>(
                 right: (layout() == DragLayout::Relative).then_some("0"),
                 bottom: (layout() == DragLayout::Relative).then_some("0"),
                 left: (layout() == DragLayout::Relative).then_some("0"),
-                visibility: if is_ready_to_hide() { "visible" } else { "hidden" },
+                visibility: if show_placeholder() { "visible" } else { "hidden" },
                 pointer_events: "none",
                 width: if layout() == DragLayout::Relative { "auto" } else { "100%" },
                 height: if layout() == DragLayout::Absolute && is_ready_to_hide() {
@@ -130,7 +167,7 @@ pub fn Draggable<T: DndItem>(
                 } else {
                     "0px".to_string()
                 },
-                if is_ready_to_hide() {
+                if show_placeholder() {
                     if let Some(placeholder_render) = context.placeholder_render {
                         {placeholder_render((
                             draggable_context.rect().height(),
@@ -177,22 +214,26 @@ pub fn DraggableHandler<T: DndItem>(
 ) -> Element {
     let mut context = use_dnd_context::<T>();
     let draggable_context = try_use_context::<DraggableContext>();
-    let mut session = use_context::<DragSession>();
+    let mut session = use_context::<DragSession<T>>();
+    let mut transactions = use_context::<DndTransactionContext<T>>();
 
     rsx! {
         div { class: "{class}",
             onmousedown: move |evt: MouseEvent| {
                 if evt.trigger_button() != Some(dioxus::html::input_data::MouseButton::Primary)
                     || context.active.peek().is_some()
+                    || !transactions.can_start()
                 {
                     return;
                 }
+                evt.stop_propagation();
                 let click_pos = evt.client_coordinates();
 
                 if let Some(mut draggable_ctx) = draggable_context
                     && let Some(mounted) = (draggable_ctx.draggable_container_ref)() {
                     evt.prevent_default();
                     session.generation.with_mut(|value| *value += 1);
+                    session.cancelled.set(false);
                     let generation = *session.generation.peek();
                     context.start_pos.set(click_pos);
                     context.mouse_pos.set(click_pos);
@@ -201,6 +242,9 @@ pub fn DraggableHandler<T: DndItem>(
                         if let Ok(rect) = mounted.get_client_rect().await
                             && *session.generation.peek() == generation
                         {
+                            if !transactions.begin(context.key_gen.call(item.clone()), generation) {
+                                return;
+                            }
                             draggable_ctx.draggable_rect.set(Some(rect));
                             context.is_floating_ready.set(false);
                             context.active_mounted.set(Some(mounted));
@@ -210,6 +254,9 @@ pub fn DraggableHandler<T: DndItem>(
                             let off_y = rect.min_y() - click_pos.y - 1.0;
 
                             context.grab_offset.set(OffsetOptions::new(off_x, off_y));
+                            // Other connected columns may have moved while idle
+                            // (for example through horizontal board scrolling).
+                            context.recalculate_rects.with_mut(|revision| *revision += 1);
                             // Mount the overlay only after its size and grab offset are known.
                             context.active.set(Some(item));
                         }
@@ -234,6 +281,7 @@ pub fn DraggableOverlay<T: DndItem>(
     item: T,
 ) -> Element {
     let mut context = use_dnd_context::<T>();
+    let overlay_renderer = try_use_context::<OverlayRenderer<T>>();
     let mut overlay_ref = use_signal(|| Option::<Rc<MountedData>>::None);
 
     let trigger_point = use_memo(move || Some((context.mouse_pos)()));
@@ -305,7 +353,7 @@ pub fn DraggableOverlay<T: DndItem>(
             onmounted: move |evt: MountedEvent| {
                 overlay_ref.set(Some(evt.data()));
             },
-            {context.render.call(item)}
+            {overlay_renderer.map(|renderer| (renderer.0)()).unwrap_or(context.render).call(item)}
         }
     }
 }
