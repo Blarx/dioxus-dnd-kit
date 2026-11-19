@@ -77,6 +77,18 @@
 //! [`use_dnd_context`](prelude::use_dnd_context). The overlay keeps its pickup
 //! dimensions until release.
 //!
+//! # Auto-scroll
+//!
+//! [`DraggableView`](prelude::DraggableView) scrolls near visible edges by
+//! default during mouse drags. Give a list or its wrapper a constrained size
+//! and CSS `overflow: auto` or `overflow: scroll`. The innermost container
+//! under the pointer that can scroll at that edge takes priority separately
+//! on each axis. Sorting and connected transfers keep updating as the content
+//! moves beneath a stationary pointer.
+//!
+//! Set `auto_scroll: false` on the view to disable edge scrolling. Pass a
+//! boolean signal to change the setting at runtime.
+//!
 //! # Connecting lists
 //!
 //! Wrap participating lists in [`ConnectedLists`](prelude::ConnectedLists),
@@ -222,7 +234,7 @@
 //! The [repository examples](https://github.com/Blarx/dioxus-dnd-kit/tree/main/examples)
 //! demonstrate both layouts:
 //!
-//! - `relative_list`: natural heights, expandable cards, and nested scrolling.
+//! - `relative_list`: natural heights, expandable cards, and an auto-scroll toggle.
 //! - `simple_list`: absolute layout with Tailwind.
 //! - `resizable_list`: absolute layout with explicit geometry recalculation.
 //! - `connected_lists`: a three-column board, live transfers, cancellation,

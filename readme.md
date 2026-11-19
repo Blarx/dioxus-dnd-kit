@@ -14,7 +14,7 @@ A flexible, performant, and layout-stable Drag-and-Drop library for **Dioxus 0.7
 ## Contents
 
 - [Features](#features) · [Installation](#installation) · [Quick Start](#quick-start) · [Components](#components)
-- [Relative Layout](#relative-layout) · [Tailwind & Dynamic Rects](#advanced-tailwind--dynamic-rects) · [Connected Lists](#connected-lists)
+- [Auto-scroll](#auto-scroll) · [Relative Layout](#relative-layout) · [Tailwind & Dynamic Rects](#advanced-tailwind--dynamic-rects) · [Connected Lists](#connected-lists)
 - [API validation](#validating-changes-with-an-api) · [Sorting columns](#sorting-the-columns-themselves)
 - [Compatibility](#compatibility) · [License](#license)
 
@@ -86,6 +86,23 @@ A specific area to grab the item. Perfect if you only want a small icon to trigg
 `Droppable`
 
 The "brain" of the operation. It detects collisions and updates your items signal in real-time.
+
+## Auto-scroll
+
+`DraggableView` enables edge scrolling by default during mouse drags. Put the
+list in a container with a constrained size and `overflow: auto` (or
+`overflow: scroll`). Hold the pointer near a visible edge to scroll on that
+axis. Scrolling speeds up closer to the edge, and sorting and transfers between
+connected lists keep updating while the pointer stays still.
+
+The innermost scrollable container under the pointer gets first chance on each
+axis. An outer container can take over when the pointer is also near its edge
+and the inner container reaches its limit. The page can scroll at the viewport
+edges while the pointer is over the view.
+
+Set `auto_scroll: false` on `DraggableView` to disable edge scrolling for that
+view. The [relative list example](./examples/relative_list.rs) includes an
+**Auto-scroll** checkbox so you can try both settings.
 
 ## Relative Layout
 

@@ -4,7 +4,7 @@ use crate::{
     DndItem, DragAxis, DragLayout,
     connected::{ConnectedListsContext, ListEntry, ListIdentity, ListSnapshot},
     context::list::ItemAccess,
-    context::{list::ListAccess, transaction::DndTransactionContext},
+    context::{DragSession, list::ListAccess, transaction::DndTransactionContext},
     draggable::Draggable,
     hooks::{use_dnd_context, visible_container_rect, wait_for_layout},
 };
@@ -16,6 +16,31 @@ use dioxus::{
 
 #[derive(Clone, Copy)]
 pub(crate) struct DragLayoutContext(pub ReadSignal<DragLayout>);
+
+#[derive(Clone, Copy)]
+struct ScrollSample {
+    revision: u64,
+    origin: ClientPoint,
+}
+
+#[derive(Clone, Copy)]
+struct SortSample {
+    mouse: ClientPoint,
+    scroll: Option<ScrollSample>,
+}
+
+impl SortSample {
+    fn previous_coordinate(self, current: Self, axis: DragAxis) -> f64 {
+        let displacement = match (self.scroll, current.scroll) {
+            (Some(before), Some(after)) if before.revision != after.revision => {
+                axis.coordinate(after.origin) - axis.coordinate(before.origin)
+            }
+            _ => 0.0,
+        };
+        // Compare both pointer samples in the current scroll position.
+        axis.coordinate(self.mouse) + displacement
+    }
+}
 
 /// Context for a container that can receive dropped items or handle sorting.
 ///
@@ -197,6 +222,7 @@ pub fn Droppable<T: DndItem>(
     let connections =
         try_use_context::<ConnectedListsContext<T>>().filter(|group| group.belongs_to(context));
     let transactions = try_use_context::<DndTransactionContext<T>>();
+    let session = try_use_context::<DragSession<T>>();
     let owner = use_hook(dioxus::core::current_scope_id);
     use_context_provider(move || ListIdentity { owner, id });
     use_context_provider(move || DragLayoutContext(layout));
@@ -208,7 +234,8 @@ pub fn Droppable<T: DndItem>(
     let mut measurement_task = use_signal(|| None::<Task>);
     let mut geometry_ready = use_signal(|| false);
     let mut measured_revision = use_signal(|| 0_u64);
-    let mut last_mouse = use_signal(|| None::<ClientPoint>);
+    let mut measured_scroll = use_signal(|| None::<ScrollSample>);
+    let mut last_sample = use_signal(|| None::<SortSample>);
     let item_access = use_memo(use_reactive((&items,), |(items,)| ItemAccess::from(items)));
 
     use_effect(move || {
@@ -307,6 +334,7 @@ pub fn Droppable<T: DndItem>(
         let current_items = items();
         let _ = axis();
         let revision = (context.recalculate_rects)();
+        let scroll_revision = session.map(|session| *session.scroll_revision.peek());
         let _ = mounted_order();
         let mounted = (droppable_context.dropable_ref)();
         let active = is_active();
@@ -319,7 +347,7 @@ pub fn Droppable<T: DndItem>(
         }
         droppable_context.update_elements_by_key(current_items, context.key_gen);
         if !active {
-            last_mouse.set(None);
+            last_sample.set(None);
         }
         if !active && !connected {
             return;
@@ -327,16 +355,33 @@ pub fn Droppable<T: DndItem>(
 
         measurement_task.set(Some(spawn(async move {
             wait_for_layout().await;
+            let rect = if let Some(mounted) = mounted.as_ref()
+                && (!connected || active)
+            {
+                mounted.get_client_rect().await.ok()
+            } else {
+                None
+            };
             if connected {
                 droppable_context
                     .dropable_rect
                     .set(visible_container_rect(container_id).await);
-            } else if let Some(mounted) = mounted
-                && let Ok(rect) = mounted.get_client_rect().await
-            {
+            } else if let Some(rect) = rect {
                 droppable_context.dropable_rect.set(Some(rect));
             }
+            let scroll = if let (true, Some(revision), Some(mounted), Some(rect)) =
+                (active, scroll_revision, mounted, rect)
+            {
+                let offset = mounted.get_scroll_offset().await.unwrap_or_default();
+                Some(ScrollSample {
+                    revision,
+                    origin: ClientPoint::new(rect.min_x() - offset.x, rect.min_y() - offset.y),
+                })
+            } else {
+                None
+            };
             droppable_context.collect_elements_rects().await;
+            measured_scroll.set(scroll);
             measured_revision.set(revision);
             geometry_ready.set(true);
         })));
@@ -346,14 +391,16 @@ pub fn Droppable<T: DndItem>(
         if !is_active() || !geometry_ready() || !(context.is_floating_ready)() {
             return;
         }
-        let mouse = (context.mouse_pos)();
+        let sample = SortSample {
+            mouse: (context.mouse_pos)(),
+            scroll: *measured_scroll.peek(),
+        };
         let direction = axis();
-        let previous = last_mouse
-            .peek()
-            .as_ref()
-            .copied()
-            .unwrap_or(*context.start_pos.peek());
-        last_mouse.set(Some(mouse));
+        let previous = last_sample.peek().unwrap_or(SortSample {
+            mouse: *context.start_pos.peek(),
+            scroll: sample.scroll,
+        });
+        last_sample.set(Some(sample));
 
         let active_key = context
             .active
@@ -383,8 +430,8 @@ pub fn Droppable<T: DndItem>(
         let target = sort_target_on_axis(
             &rects,
             from,
-            mouse,
-            direction.coordinate(previous),
+            sample.mouse,
+            previous.previous_coordinate(sample, direction),
             direction,
         );
         drop(elements);

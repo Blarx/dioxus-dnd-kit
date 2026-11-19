@@ -97,6 +97,43 @@ fn mixed_heights_do_not_swap_back_after_remeasurement() {
 }
 
 #[test]
+fn stationary_pointer_sorts_when_scroll_moves_content_on_either_axis() {
+    let mouse = ClientPoint::new(40.0, 40.0);
+    let sample = |revision, offset| SortSample {
+        mouse,
+        scroll: Some(ScrollSample {
+            revision,
+            origin: ClientPoint::new(offset, offset),
+        }),
+    };
+    let bounds = |position| {
+        Some(PixelsRect::new(
+            PixelsVector2D::new(position, position).to_point(),
+            PixelsSize::new(60.0, 60.0),
+        ))
+    };
+    let before = sample(1, 0.0);
+    for axis in [DragAxis::Vertical, DragAxis::Horizontal] {
+        let rects = [None, bounds(0.0)];
+        let previous = before.previous_coordinate(sample(1, -20.0), axis);
+        assert_eq!(sort_target_on_axis(&rects, 0, mouse, previous, axis), None);
+
+        let previous = before.previous_coordinate(sample(2, -20.0), axis);
+        assert_eq!(
+            sort_target_on_axis(&rects, 0, mouse, previous, axis),
+            Some(1)
+        );
+
+        let rects = [bounds(20.0), None];
+        let previous = before.previous_coordinate(sample(2, 20.0), axis);
+        assert_eq!(
+            sort_target_on_axis(&rects, 1, mouse, previous, axis),
+            Some(0)
+        );
+    }
+}
+
+#[test]
 fn ignores_gaps_outside_width_and_missing_rects() {
     let rects = [rect(0.0, 60.0), rect(72.0, 160.0), None];
     assert_eq!(

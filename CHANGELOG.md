@@ -2,6 +2,15 @@
 
 Notable changes to `dioxus-dnd-kit` are documented here, newest first.
 
+## Unreleased
+
+### Added
+
+- `DraggableView` enables horizontal and vertical edge scrolling during mouse
+  drags. Nested containers use the innermost eligible scroller on each axis.
+  Sorting and connected transfers keep updating under a stationary pointer.
+  Set `auto_scroll: false` to opt out.
+
 ## [0.3.0] — 2026-11-19
 
 ### Added

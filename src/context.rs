@@ -4,7 +4,11 @@
 pub(crate) mod list;
 pub(crate) mod transaction;
 
-use std::{marker::PhantomData, rc::Rc};
+use std::{
+    marker::PhantomData,
+    rc::Rc,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 use dioxus::{
     html::geometry::{ClientPoint, PixelsRect, PixelsVector2D},
@@ -26,6 +30,7 @@ pub(crate) struct DragSession<T: DndItem> {
     pub generation: Signal<u64>,
     pub cancelled: Signal<bool>,
     pub last_end: Signal<Option<DragEnd>>,
+    pub scroll_revision: Signal<u64>,
     marker: PhantomData<fn() -> T>,
 }
 
@@ -41,6 +46,7 @@ impl<T: DndItem> DragSession<T> {
             generation: Signal::new(0),
             cancelled: Signal::new(false),
             last_end: Signal::new(None),
+            scroll_revision: Signal::new(0),
             marker: PhantomData,
         }
     }
@@ -215,6 +221,13 @@ pub fn DraggableView<T: DndItem>(
     #[props(default)]
     class: ReadSignal<String>,
 
+    /// Enables scrolling at visible container edges during a mouse drag.
+    ///
+    /// Defaults to `true`. Set to `false` to disable edge scrolling for this
+    /// view, or pass a boolean signal to change the setting at runtime.
+    #[props(default = true)]
+    auto_scroll: ReadSignal<bool>,
+
     /// Content containing [`Draggable`](crate::prelude::Draggable) items and
     /// [`Droppable`](crate::prelude::Droppable) zones.
     children: Element,
@@ -256,7 +269,7 @@ pub fn DraggableView<T: DndItem>(
 ) -> Element {
     let mut context =
         use_context_provider(move || DndContext::new(key_gen, render, placeholder_render));
-    let session = use_context_provider(DragSession::<T>::new);
+    let mut session = use_context_provider(DragSession::<T>::new);
     let ancestor_coordinator = try_use_context::<DragCoordinator>();
     let coordinator =
         use_context_provider(move || ancestor_coordinator.unwrap_or_else(DragCoordinator::new));
@@ -304,9 +317,15 @@ pub fn DraggableView<T: DndItem>(
     });
     use_drop(move || transactions.shutdown());
 
+    static NEXT_VIEW_ID: AtomicUsize = AtomicUsize::new(0);
+    let view_id = use_hook(|| NEXT_VIEW_ID.fetch_add(1, Ordering::Relaxed));
     let dragging = use_memo(move || context.active.read().is_some());
+    let scroll_enabled = use_memo(move || auto_scroll() && (context.is_floating_ready)());
     use_window_drag_events(
+        view_id,
         dragging,
+        scroll_enabled,
+        context.mouse_pos,
         use_callback(move |event: [f64; 3]| match event[0] as u8 {
             0 => context.set_mouse_position(ClientPoint::new(event[1], event[2])),
             1 => {
@@ -321,12 +340,13 @@ pub fn DraggableView<T: DndItem>(
     }));
     use_window_on_scroll(use_callback(move |_| {
         if context.active.peek().is_some() {
+            session.scroll_revision.with_mut(|r| *r += 1);
             context.recalculate_rects.with_mut(|r| *r += 1);
         }
     }));
 
     rsx! {
-        ScrollableView { class,
+        ScrollableView { class, "data-dnd-view": "{view_id}",
             style: if context.active.read().is_some() {
                 "user-select: none; -webkit-user-select: none;"
             } else {

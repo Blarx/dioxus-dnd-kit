@@ -64,7 +64,7 @@ fn initial_tasks() -> Vec<Task> {
         Task {
             id: 5,
             title: "Scroll while dragging",
-            description: "The list has its own scroll container. Scroll it while holding a card, then continue sorting with fresh viewport coordinates.",
+            description: "Hold a card near the top or bottom edge of the scroll area. The list scrolls and you can keep sorting with the pointer held still.",
             expanded: true,
         },
     ]
@@ -79,6 +79,7 @@ fn App() -> Element {
     let mut tasks = use_signal(initial_tasks);
     let mut layout = use_signal(|| DragLayout::Relative);
     let mut narrow = use_signal(|| false);
+    let mut auto_scroll = use_signal(|| true);
     let mut custom_placeholder = use_signal(|| true);
     let mut resize_during_drag = use_signal(|| false);
     let order = tasks()
@@ -92,6 +93,7 @@ fn App() -> Element {
         style { "{CSS}" }
         DraggableView {
             class: "page",
+            auto_scroll,
             key_gen: |task: Task| task.id.to_string(),
             render: move |task: Task| {
                 let id = task.id;
@@ -140,6 +142,13 @@ fn App() -> Element {
                 label {
                     input { r#type: "checkbox", checked: narrow(), onchange: move |event| narrow.set(event.checked()) }
                     "Narrow list"
+                }
+                label {
+                    input {
+                        r#type: "checkbox", checked: auto_scroll(),
+                        onchange: move |event| auto_scroll.set(event.checked()),
+                    }
+                    "Auto-scroll"
                 }
                 label {
                     input { r#type: "checkbox", checked: custom_placeholder(), onchange: move |event| custom_placeholder.set(event.checked()) }
