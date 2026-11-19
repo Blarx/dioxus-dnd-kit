@@ -15,6 +15,10 @@ Both call `workflows/checks.yml`, which checks:
 Clippy includes the compilation checks previously performed by `cargo check`.
 No registry token is passed to the shared checks.
 
+`actionlint` is a Go tool: the Rust job sets up Go and installs the pinned
+`github.com/rhysd/actionlint/cmd/actionlint@v1.7.12` module with `go install`.
+The Rust tool installer is used for Dioxus CLI in the Web job.
+
 The library does not track `Cargo.lock`. The Rust job generates it once and
 uploads it as `checked-cargo-lock`. The Web and publish jobs restore that file
 and use `--locked`, so they use the dependency versions that passed the checks.

@@ -23,10 +23,14 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Install workflow linter
-        uses: taiki-e/install-action@v2
+      - name: Install Go for workflow linting
+        uses: actions/setup-go@v6
         with:
-          tool: actionlint@1.7.12
+          go-version: stable
+          cache: false
+
+      - name: Install workflow linter
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
       - name: Lint workflows
         run: actionlint -color
