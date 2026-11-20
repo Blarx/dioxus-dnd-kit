@@ -4,10 +4,10 @@ version = "0.4.0"
 authors = ["Alexandr <flatbusy@gmail.com>"]
 edition = "2024"
 repository = "https://github.com/Blarx/dioxus-dnd-kit"
-description = "A flexible, performant, and layout-stable Drag-and-Drop library for Dioxus."
+description = "Drag-and-drop toolkit for Dioxus with sortable lists, cross-list transfers, and auto-scroll."
 license = "MIT OR Apache-2.0"
-keywords = ["dioxus", "ui", "drag-and-drop", "dnd", "wasm"]
-categories = ["gui", "web-programming"]
+keywords = ["dioxus", "drag-and-drop", "sortable", "dnd", "wasm"]
+categories = ["gui", "web-programming", "wasm"]
 readme = "readme.md"
 exclude = [".github", "dist", "target"]
 
