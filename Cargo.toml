@@ -4,6 +4,7 @@ version = "0.4.0"
 authors = ["Alexandr <flatbusy@gmail.com>"]
 edition = "2024"
 repository = "https://github.com/Blarx/dioxus-dnd-kit"
+homepage = "https://blarx.github.io/dioxus-dnd-kit/"
 description = "Drag-and-drop toolkit for Dioxus with sortable lists, cross-list transfers, and auto-scroll."
 license = "MIT OR Apache-2.0"
 keywords = ["dioxus", "drag-and-drop", "sortable", "dnd", "wasm"]
