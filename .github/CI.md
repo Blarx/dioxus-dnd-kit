@@ -25,7 +25,7 @@ and use `--locked`, so they use the dependency versions that passed the checks.
 
 Before a release, set the package version in `Cargo.toml`, finish the changelog,
 and commit the changes. Push a tag matching the version exactly, such as
-`v0.3.0` for version `0.3.0`. A mismatched tag fails before the release checks.
+`v0.4.0` for version `0.4.0`. A mismatched tag fails before the release checks.
 The publish job runs only after all shared checks succeed, and uses the existing
 `CARGO_REGISTRY_TOKEN` repository secret. Updating the workflow files alone does
 not publish a crate.

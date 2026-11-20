@@ -35,7 +35,7 @@ Developed to handle smooth reordering, even when using JIT-engines like **Tailwi
 Add to your `Cargo.toml`:
 ```toml
 [dependencies]
-dioxus-dnd-kit = "0.3"
+dioxus-dnd-kit = "0.4"
 ```
 
 ## Quick Start
@@ -256,6 +256,9 @@ dx serve --example connected_lists --web
 ```
 
 ## Compatibility
+
+`0.4` enables [auto-scroll](#auto-scroll) by default during mouse drags. Set
+`auto_scroll: false` on `DraggableView` to opt out.
 
 `0.3` adds connected lists through an opt-in wrapper and container IDs. Existing
 component calls, the `prelude` imports, `DndItem` bounds, and public context fields
