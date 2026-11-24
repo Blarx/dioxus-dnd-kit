@@ -35,7 +35,7 @@ Developed to handle smooth reordering, even when using JIT-engines like **Tailwi
 Add to your `Cargo.toml`:
 ```toml
 [dependencies]
-dioxus-dnd-kit = "0.4"
+dioxus-dnd-kit = "0.4.1"
 ```
 
 ## Quick Start

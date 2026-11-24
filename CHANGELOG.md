@@ -2,6 +2,20 @@
 
 Notable changes to `dioxus-dnd-kit` are documented here, newest first.
 
+## [0.4.1] — 2026-11-24
+
+### Fixed
+
+- Fix a crash when starting a drag in Dioxus Desktop by requiring
+  `dioxus-floating` 0.3.3 or later within the 0.3 series.
+- Use native timers on Desktop for the examples that simulate delayed drop
+  validation or resize items during a drag.
+
+### Changed
+
+- Update the crate description, keywords, and categories, and link to the demo
+  gallery from the package metadata.
+
 ## [0.4.0] — 2026-11-20
 
 ### Added
@@ -153,6 +167,7 @@ Notable changes to `dioxus-dnd-kit` are documented here, newest first.
 - Custom item and placeholder rendering, stable DOM keys, and the `simple_list`
   example.
 
+[0.4.1]: https://github.com/Blarx/dioxus-dnd-kit/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Blarx/dioxus-dnd-kit/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Blarx/dioxus-dnd-kit/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Blarx/dioxus-dnd-kit/compare/v0.1.3...v0.2.0
