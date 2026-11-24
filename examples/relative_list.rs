@@ -1,6 +1,8 @@
 use dioxus::prelude::*;
 use dioxus_dnd_kit::prelude::*;
 
+mod support;
+
 const CSS: &str = r#"
 * { box-sizing: border-box; }
 body { margin: 0; background: #f3f5f9; color: #203047; font: 16px/1.5 system-ui, sans-serif; }
@@ -194,7 +196,7 @@ fn ResizeDuringDrag(mut tasks: Signal<Vec<Task>>, enabled: Signal<bool>) -> Elem
         }
         if enabled && let Some(active) = active {
             pending.set(Some(spawn(async move {
-                gloo_timers::future::TimeoutFuture::new(500).await;
+                support::delay(500).await;
                 tasks.with_mut(|tasks| {
                     if let Some(task) = tasks.iter_mut().find(|task| task.id == active.id) {
                         task.expanded = !task.expanded;

@@ -14,9 +14,14 @@ exclude = [".github", "dist", "target"]
 
 [dependencies]
 dioxus = { version = "0.7" }
-dioxus-floating = { version = "0.3" }
+dioxus-floating = { version = "0.3.3" }
 futures = { version = "0.3" }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 gloo-timers = { version = "0.3", features = ["futures"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+tokio = { version = "1", features = ["time"] }
 
 [[example]]
 name = "simple_list"

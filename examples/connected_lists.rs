@@ -1,6 +1,8 @@
 use dioxus::prelude::*;
 use dioxus_dnd_kit::prelude::*;
 
+mod support;
+
 const CSS: &str = r#"
 * { box-sizing: border-box; }
 body { margin: 0; color: #243247; background: #eef2f7; font: 15px/1.5 system-ui, sans-serif; }
@@ -196,7 +198,7 @@ fn App() -> Element {
                 let change = &event.change;
                 save_message.set(format!("Saving #{}: {}[{}] → {}[{}]…", change.item.id,
                     change.from.list_id, change.from.index, change.to.list_id, change.to.index));
-                gloo_timers::future::TimeoutFuture::new(1200).await;
+                support::delay(1200).await;
                 if fail {
                     let result = event.reject();
                     save_message.set(format!("Simulated API error. Rollback: {result:?}"));
@@ -236,7 +238,7 @@ fn App() -> Element {
                         let fail = *reject_next.peek();
                         reject_next.set(false);
                         save_message.set(format!("Saving column {}: {} → {}…", event.change.item.title, event.change.from.index, event.change.to.index));
-                        gloo_timers::future::TimeoutFuture::new(1200).await;
+                        support::delay(1200).await;
                         if fail {
                             let result = event.reject();
                             save_message.set(format!("Column API error. Rollback: {result:?}"));

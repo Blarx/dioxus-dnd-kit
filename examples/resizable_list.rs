@@ -1,6 +1,7 @@
 use dioxus::prelude::*;
 use dioxus_dnd_kit::prelude::*;
-use gloo_timers::future::TimeoutFuture;
+
+mod support;
 
 const APP_CSS: &str = r#"
 html,
@@ -547,7 +548,7 @@ fn ResizeRecalculationBridge(
         }
 
         spawn(async move {
-            TimeoutFuture::new(35).await;
+            support::delay(35).await;
             context.recalculate_rects.with_mut(|value| *value += 1);
             recalculate_count.with_mut(|value| *value += 1);
         });
@@ -584,7 +585,7 @@ fn ActiveResizeProbe(
         last_active_id.set(Some(active_id));
 
         spawn(async move {
-            TimeoutFuture::new(450).await;
+            support::delay(450).await;
             let still_active = context
                 .active
                 .peek()
